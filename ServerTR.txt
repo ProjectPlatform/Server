@@ -1,0 +1,13 @@
+Tasks for Anthons in the server part:
+
+The main target is to provide a small part of API, which will let clients to Get the User's profiles by their IDs
+Now I work on this part on the client part - so any user structs will be finished tomorrow, I think
+
+So the Task is next:
+	User without authorization must be able to create the new profile and get its ID from the server
+	Able to get all user Info with one request
+	User must be able to get exactly necessary profile fields from the server in JSON
+	User must be able to get count of objects in necessary field of necessary user
+		For Example: how many Connected User 124821390 has?
+	Able to change this fields
+	All this info must be holded in the PostgreSQL
