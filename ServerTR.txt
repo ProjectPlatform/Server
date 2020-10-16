@@ -1,13 +1,29 @@
-Tasks for Anthons in the server part:
+TR for Anthons
 
-The main target is to provide a small part of API, which will let clients to Get the User's profiles by their IDs
-Now I work on this part on the client part - so any user structs will be finished tomorrow, I think
+Anthon Shusharin must do the server's backend, And the Anthon from SarOv will make the NetPart
 
-So the Task is next:
-	User without authorization must be able to create the new profile and get its ID from the server
-	Able to get all user Info with one request
-	User must be able to get exactly necessary profile fields from the server in JSON
-	User must be able to get count of objects in necessary field of necessary user
-		For Example: how many Connected User 124821390 has?
-	Able to change this fields
-	All this info must be holded in the PostgreSQL
+So Global TR for Sarov Anthon ~ SarovAnt:
+	The ${Net} must provide the transpoting requests and their encrypting
+	Provide ability to get the temporary "tickets" for access ~ Kerberos Algorithm
+	Filtering of Noise Request - queerly ofter requests, which may be maden by bots
+	All requests will be then sent to the ${Back} via API provided by the Shusharin Anthon
+
+Global TR for Shusharin Anthon ~ One More Anthon ~ OmAnt:
+	${Back} must get all requests from the Net, handle and process the answers for them
+	Back must connect to the DB and hold all information there
+
+
+And the Cotemporary TR For SarovAnt - 
+	Provide the way to connect to the Server using https 
+	Provide the API to create a new user via https request
+	Provide the API to See the Connected people  and Groups of the user with specific ID
+		I remind you that you can see only yourself Groups
+		And able to any connected people of anyone
+	Provide the API to see the people who want to connect to you
+	Provide the API to send the Connection Request to people with specific ID
+	Provide the API to Deny or Allow the Connection to any connection request via the ID of ConnectionWanter.
+	All this API's must be provided by the Net, however be redirected to the BackEnd
+
+And the Contemporary TR For OmAnt - 
+	Provide the storaging all info in BD
+	Provide the API requesting processing with checking if user is able to see the requested info
