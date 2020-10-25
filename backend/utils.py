@@ -36,7 +36,7 @@ async def insert_with_unique_id(
             )
             return uid
         except UniqueViolationError as e:
-            if e.column_name == "id":
+            if e.constraint_name == f"{table}_id_pkey":
                 continue
             else:
                 raise e
