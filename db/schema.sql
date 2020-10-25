@@ -24,6 +24,7 @@ CREATE TABLE users (
     nick varchar(64) UNIQUE NOT NULL,
     password varchar(128) NOT NULL,
     name varchar(128) NOT NULL,
+    email varchar(128) NOT NULL,
     avatar_id varchar(12) REFERENCES images ON DELETE SET NULL,
     pspicture jsonb
 );
