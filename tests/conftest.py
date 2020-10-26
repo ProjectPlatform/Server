@@ -4,13 +4,15 @@ import backend
 from settings import TestSettings
 import pathlib
 
-@pytest.fixture(scope='session')
-def event_loop():
- loop = asyncio.get_event_loop()
- yield loop
- loop.close()
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
+def event_loop():
+    loop = asyncio.get_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest.fixture(scope="session")
 async def db():
     await backend.init(TestSettings())
     await backend.config.db.execute(
