@@ -1,6 +1,7 @@
 import asyncpg
 from settings import Settings
 from backend import config
+from backend.user import *
 
 
 async def init(settings: Settings):
