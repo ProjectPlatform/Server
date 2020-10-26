@@ -7,8 +7,9 @@ def test_init(db):
 
 
 @pytest.mark.asyncio
-async def test_register(db):
-    await backend.register(
+async def test_registration(db):
+    global vasya_id
+    vasya_id = await backend.register(
         "vpleshivy",
         "youllneverguessmypassword",
         "st000000@student.spbu.ru",
