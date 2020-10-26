@@ -2,6 +2,11 @@ import pytest
 import backend
 
 
+def test_pre_init():
+    with pytest.raises(backend.exceptions.NotInitialised):
+        backend.authenticate("user", "pass")
+
+
 def test_init(db):
     pass
 
