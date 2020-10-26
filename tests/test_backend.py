@@ -29,3 +29,14 @@ async def test_registration(db):
             "st000000@student.spbu.ru",
             "Петров Пётр Петрович",
         )
+
+
+@pytest.mark.asyncio
+async def test_authentication(db):
+    assert (
+        await backend.authenticate("vpleshivy", "youllneverguessmypassword") == vasya_id
+    )
+    with pytest.raises(backend.exceptions.AuthenticationError):
+        await backend.authenticate("vpleshivy", "youllguessmypassword") == vasya_id
+    with pytest.raises(backend.exceptions.AuthenticationError):
+        await backend.authenticate("pppetrov", "qwerty12345")

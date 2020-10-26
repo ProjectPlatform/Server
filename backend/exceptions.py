@@ -8,3 +8,7 @@ class NickTaken(Exception):
 
 class EmailTaken(Exception):
     pass
+
+
+class AuthenticationError(Exception):
+    pass
