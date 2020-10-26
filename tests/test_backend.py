@@ -1,5 +1,6 @@
 import pytest
 import backend
+import random
 
 
 def test_pre_init():
@@ -45,3 +46,11 @@ async def test_authentication(db):
         await backend.authenticate("vpleshivy", "youllguessmypassword") == vasya_id
     with pytest.raises(backend.exceptions.AuthenticationError):
         await backend.authenticate("pppetrov", "qwerty12345")
+
+
+@pytest.mark.asyncio
+async def test_insert_with_unique_id(db):
+    state = random.getstate()
+    await backend.register("johnhater", "asdfjasdf", "st666666@student.spbu.ru", "Иван")
+    random.setstate(state)
+    await backend.register("iamigor", "bujhm", "igor123@mail.ru", "Игорь")
