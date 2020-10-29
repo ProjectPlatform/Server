@@ -1,12 +1,24 @@
-from fastapi import FastAPI, Query, Depends, HTTPException, status, Body, Request, File, UploadFile
-from datetime import datetime, timedelta
-from src.schemas import *
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from passlib.hash import sha256_crypt
-from src.login import *
+from fastapi import FastAPI
+from api.login import *
 
-app = FastAPI()
+app = FastAPI(root_path="/api/v1")
+
+#file_path = "/home/kondrahin/Lections/2020-10-03-13-41-32.mkv"
+
+
+# @app.get("/echo/{tmp}")
+# async def echo(tmp: int):
+#     return {'echo': tmp}
+#
+#
+# @app.get("/file/{name}")
+# def send_file():
+#     return FileResponse(file_path)
+#
+#
+# @app.get("/echo")
+# def echo_body(tmp: str):
+#     return {'echo': tmp}
+
 
 app.include_router(router)

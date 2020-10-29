@@ -1,7 +1,7 @@
 import logging
 from settings import Settings
 
-from backend.__init__ import init_db
+from backend.__init__ import init as init_db
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
