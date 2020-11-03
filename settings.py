@@ -1,7 +1,7 @@
 from pydantic import BaseSettings
 
 
-class Settings:
+class Settings(BaseSettings):
     db_host: str = "localhost"
     db_port: int = 5432
     db_name: str = "projectplatform"
