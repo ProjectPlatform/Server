@@ -1,5 +1,5 @@
 import pytest
-import backend
+from app.app import backend
 import random
 
 
@@ -40,7 +40,7 @@ async def test_registration(db):
 @pytest.mark.asyncio
 async def test_authentication(db):
     assert (
-        await backend.authenticate("vpleshivy", "youllneverguessmypassword") == vasya_id
+            await backend.authenticate("vpleshivy", "youllneverguessmypassword") == vasya_id
     )
     with pytest.raises(backend.exceptions.AuthenticationError):
         await backend.authenticate("vpleshivy", "youllguessmypassword") == vasya_id

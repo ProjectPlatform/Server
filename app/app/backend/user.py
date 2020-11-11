@@ -1,12 +1,14 @@
-from backend.utils import db_required, insert_with_unique_id
-from backend import config
-from backend.exceptions import NickTaken, EmailTaken, AuthenticationError
+from pydantic import EmailStr
+
+from app.app.backend.utils import db_required, insert_with_unique_id
+from app.app.backend import config
+from app.app.backend.exceptions import NickTaken, EmailTaken, AuthenticationError
 from passlib.hash import pbkdf2_sha256
 from asyncpg.exceptions import UniqueViolationError
 
 
 @db_required
-async def register(nick: str, password: str, email: str, name: str):
+async def register(nick: str, password: str, email: EmailStr, name: str):
     password = pbkdf2_sha256.hash(password)
     try:
         return await insert_with_unique_id(

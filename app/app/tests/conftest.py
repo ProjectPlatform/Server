@@ -1,7 +1,7 @@
 import asyncio
 import pytest
-import backend
-from settings import TestSettings
+from app.app import backend
+from app.app.settings import TestSettings
 import pathlib
 
 

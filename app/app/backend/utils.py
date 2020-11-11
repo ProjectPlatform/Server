@@ -1,5 +1,5 @@
-from backend import config
-from backend.exceptions import NotInitialised
+from app.app.backend import config
+from app.app.backend.exceptions import NotInitialised
 from asyncpg.exceptions import UniqueViolationError
 from functools import update_wrapper
 import random
