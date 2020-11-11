@@ -10,5 +10,10 @@ def read_root():
     return {"status": "ok"}
 
 
+@app.get("/echo")
+def read_root(echo: str):
+    return {"echo": echo}
+
+
 # app = FastAPI(root_path="/api/v1")
 app.include_router(router)
