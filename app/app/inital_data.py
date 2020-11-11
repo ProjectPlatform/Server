@@ -21,15 +21,18 @@ async def init() -> None:
     await init_db(settings=setttings)
 
 
-def main() -> None:
+async def main() -> None:
     from dotenv import load_dotenv
     dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
     if os.path.exists(dotenv_path):
         load_dotenv(dotenv_path)
     logger.info("Creating initial data")
-    asyncio.run(init())
+    await init()
     logger.info("Initial data created")
 
+loop = asyncio.get_event_loop()
+loop.create_task(main())
+#loop.run_until_complete(main())
 
-if __name__ != "__main__":
-    threading.Thread(target=main).start()
+# if __name__ != "__main__":
+#     threading.Thread(target=main).start()
