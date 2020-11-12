@@ -84,6 +84,7 @@ CREATE TABLE chats (
     non_removable_messages boolean NOT NULL,
     non_modifiable_messages boolean NOT NULL,
     auto_remove_messages boolean NOT NULL,
+    auto_remove_period integer CHECK (auto_remove_period IS NULL OR auto_remove_period > 0),
     digest_messages boolean NOT NULL
 );
 CREATE TABLE chat_memberships (
