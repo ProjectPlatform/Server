@@ -80,12 +80,18 @@ CREATE TABLE chats (
     is_encrypted boolean NOT NULL,
     is_personal boolean NOT NULL,
     is_user_expandable boolean NOT NULL,
+    is_user_expandable_modified_by varchar(12) REFERENCES users ON DELETE SET NULL,
     is_non_admin boolean NOT NULL,
+    is_non_admin_modified_by varchar(12) REFERENCES users ON DELETE SET NULL,
     non_removable_messages boolean NOT NULL,
+    non_removable_messages_modified_by varchar(12) REFERENCES users ON DELETE SET NULL,
     non_modifiable_messages boolean NOT NULL,
+    non_modifiable_messages_modified_by varchar(12) REFERENCES users ON DELETE SET NULL,
     auto_remove_messages boolean NOT NULL,
+    auto_remove_messages_modified_by varchar(12) REFERENCES users ON DELETE SET NULL,
     auto_remove_period integer CHECK (auto_remove_period IS NULL OR auto_remove_period > 0),
-    digest_messages boolean NOT NULL
+    digest_messages boolean NOT NULL,
+    digest_messages_modified_by varchar(12) REFERENCES users ON DELETE SET NULL
 );
 CREATE TABLE chat_memberships (
     id varchar(12) PRIMARY KEY,
