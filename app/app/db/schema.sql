@@ -21,8 +21,8 @@ CREATE TABLE images (
 );
 CREATE TABLE documents (
     id varchar(12) PRIMARY KEY,
-    name varchar(256) NOT NULL;
-path varchar(256 NOT NULL),
+    name varchar(256) NOT NULL,
+    path varchar(256) NOT NULL
 );
 CREATE TABLE users (
     id varchar(12) PRIMARY KEY,
@@ -95,20 +95,20 @@ CREATE TABLE chats (
 );
 CREATE TABLE chat_memberships (
     id varchar(12) PRIMARY KEY,
-    user_id varchar(12) REFERENCES users NOT NULL ON DELETE CASCADE,
-    chat_id varchar(12) REFERENCES chats NOT NULL ON DELETE CASCADE,
+    user_id varchar(12) REFERENCES users ON DELETE CASCADE NOT NULL,
+    chat_id varchar(12) REFERENCES chats ON DELETE CASCADE NOT NULL,
     is_admin boolean NOT NULL
 );
 CREATE TABLE messages (
     id varchar(12) PRIMARY KEY,
-    chat_id varchar(12) REFERENCES chats NOT NULL ON DELETE CASCADE,
+    chat_id varchar(12) REFERENCES chats ON DELETE CASCADE NOT NULL,
     time timestamp NOT NULL,
     author_id varchar(12) REFERENCES users ON DELETE SET NULL,
     body text NOT NULL
 );
 CREATE TABLE message_tags (
     id varchar(12),
-    message_id varchar(12) REFERENCES messages NOT NULL ON DELETE CASCADE,
+    message_id varchar(12) REFERENCES messages ON DELETE CASCADE NOT NULL,
     tag varchar(64) NOT NULL
 );
 CREATE TABLE message_attachments (
