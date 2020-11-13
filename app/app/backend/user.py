@@ -1,5 +1,5 @@
 from pydantic import EmailStr
-
+from typing import Optional, Dict, Any
 from app.app.backend.utils import db_required, insert_with_unique_id
 from app.app.backend import config
 from app.app.backend.exceptions import NickTaken, EmailTaken, AuthenticationError
@@ -31,3 +31,12 @@ async def authenticate(nick: str, password: str) -> str:
         if pbkdf2_sha256.verify(password, user["password"]):
             return user["id"]
     raise AuthenticationError()
+
+
+@db_required
+async def get_user_info(current_user: Optional[str], user_id: str) -> Dict[str, Any]:
+    # TODO: This function will need to be expanded with more info about the user
+    if u := await config.db.fetchrow("SELECT * FROM users WHERE id=$1", user_id):
+        return {"nick": u["nick"], "name": u["name"], "avatar_id": u["avatar_id"]}
+    else:
+        raise ObjectNotFound()
