@@ -111,5 +111,11 @@ CREATE TABLE message_tags (
     message_id varchar(12) REFERENCES messages NOT NULL ON DELETE CASCADE,
     tag varchar(64) NOT NULL
 );
+CREATE TABLE message_attachments (
+    id varchar(12) PRIMARY KEY,
+    document_id varchar(12) REFERENCES documents ON DELETE CASCADE,
+    image_id varchar(12) REFERENCES images ON DELETE CASCADE,
+    CHECK((document_id IS NULL AND image_id IS NOT NULL) OR (document_id IS NOT NULL AND image_id IS NULL))
+);
 COMMIT;
 
