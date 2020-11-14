@@ -53,15 +53,15 @@ async def get_info(current_user: str, chat_id: str) -> Dict[str, Any]:
         "SELECT distinct tag FROM message_tags JOIN messages ON messages.id=message_id WHERE messages.chat_id=$1",
         chat_id,
     ):
-        res["tags"].append(record.tag)
+        res["tags"].append(record['tag'])
     res["attachments"] = []
     for record in await config.db.fetch(
-        "SELECT id FROM message_attachments JOIN messages ON messages.id=message_id WHERE messages.chat_id = $1",
+        "SELECT message_attachments.id as id FROM message_attachments JOIN messages ON messages.id=message_id WHERE messages.chat_id = $1",
         chat_id,
     ):
         res["attachments"].append(record["id"])
     res["last_message_id"] = await config.db.fetchval(
-        "SELECT id FROM messages WHERE chat_id=$1 ORDER BY timestamp DESC LIMIT 1",
+        "SELECT id FROM messages WHERE chat_id=$1 ORDER BY time DESC LIMIT 1",
         chat_id,
     )
     return res
@@ -69,7 +69,7 @@ async def get_info(current_user: str, chat_id: str) -> Dict[str, Any]:
 
 @db_required
 async def __is_chat_non_admin__(chat_id: str) -> bool:
-    return await __get_info__(chat_id)["is_non_admin"]
+    return (await __get_info__(chat_id))["is_non_admin"]
 
 
 @db_required
@@ -77,7 +77,7 @@ async def __add_user__(chat_id: str, user_to_add: str, is_admin: bool = False) -
     await insert_with_unique_id(
         "chat_memberships",
         ("user_id", "chat_id", "is_admin"),
-        (current_user, res, is_admin),
+        (user_to_add, chat_id, is_admin),
     )
     return True
 
@@ -87,7 +87,7 @@ async def add_user(current_user: str, chat_id: str, user_to_add: str) -> bool:
     if await has_user(current_user, chat_id):
         c = await __get_info__(chat_id)
         if not c["is_personal"] and (
-            c["is_user_expandable"] or await is_chat_admin(current_user, chat_id)
+            c["is_user_expandable"] or await is_user_admin(current_user, chat_id)
         ):
             if not await has_user(user_to_add, chat_id):
                 return await __add_user__(chat_id, user_to_add)
@@ -109,8 +109,8 @@ async def __remove_user__(chat_id: str, user_to_remove: str) -> bool:
 @db_required
 async def remove_user(current_user: str, chat_id: str, user_to_remove: str) -> bool:
     if await has_user(current_user, chat_id):
-        if current_user == user_to_remove or await is_chat_admin(current_user, chat_id):
-            if await has_user(user_to_add, chat_id):
+        if current_user == user_to_remove or await is_user_admin(current_user, chat_id):
+            if await has_user(user_to_remove, chat_id):
                 return await __remove_user__(chat_id, user_to_remove)
             else:
                 return False
@@ -190,7 +190,7 @@ async def create(
                     current_user,
                 ),
             )
-            await __add__user_to_chat__(res, current_user, True)
+            await __add_user__(res, current_user, True)
     return await get_info(current_user, res)
 
 
@@ -226,9 +226,9 @@ async def set_non_admin(current_user: str, chat_id: str, value: bool) -> bool:
 
 
 @db_required
-async def __set_propperty__(current_user: str, propperty: str, value: bool) -> bool:
+async def __set_propperty__(current_user: str, chat_id: str, propperty: str, value: bool) -> bool:
     if await is_user_admin(current_user, chat_id) or (
-        value and __is_chat_non_admin__(chat_id)
+        value and await __is_chat_non_admin__(chat_id)
     ):
         await config.db.execute(
             f"UPDATE chats SET {propperty}=$1, {propperty}_modified_by=$2 WHERE id=$3",
@@ -242,21 +242,21 @@ async def __set_propperty__(current_user: str, propperty: str, value: bool) -> b
 
 @db_required
 async def set_user_expandable(current_user: str, chat_id: str, value: bool) -> bool:
-    return await __set_propperty__(current_user, "is_user_expandable", value)
+    return await __set_propperty__(current_user, chat_id, "is_user_expandable", value)
 
 
 @db_required
 async def set_non_removable_messages(
     current_user: str, chat_id: str, value: bool
 ) -> bool:
-    return await __set_propperty__(current_user, "non_removable_messages", value)
+    return await __set_propperty__(current_user, chat_id, "non_removable_messages", value)
 
 
 @db_required
 async def set_non_modifiable_messages(
     current_user: str, chat_id: str, value: bool
 ) -> bool:
-    return await __set_propperty__(current_user, "non_modifiable_messages", value)
+    return await __set_propperty__(current_user, chat_id, "non_modifiable_messages", value)
 
 
 @db_required
@@ -265,7 +265,7 @@ async def set_auto_remove_messages(
 ) -> bool:
     async with config.db.acquire() as con:
         async with con.transaction():
-            await __set_propperty__(current_user, "non_removable_messages", value)
+            await __set_propperty__(current_user, chat_id, "non_removable_messages", value)
             await config.db.execute(
                 "UPDATE chats SET auto_remove_period=$1 WHERE id=$2", period, chat_id
             )
@@ -274,7 +274,7 @@ async def set_auto_remove_messages(
 
 @db_required
 async def set_digest_messages(current_user: str, chat_id: str, value: bool) -> bool:
-    return await __set_propperty__(current_user, "digest_messages", value)
+    return await __set_propperty__(current_user, chat_id, "digest_messages", value)
 
 
 @db_required
@@ -286,9 +286,9 @@ async def __message_add_extra_fields__(m: Dict[str, Any]) -> None:
         m["attachments"].append(record["id"])
     m["tags"] = []
     for record in await config.db.fetch(
-        "SELECT id FROM message_tags WHERE message_id=$1", m["id"]
+        "SELECT tag FROM message_tags WHERE message_id=$1", m["id"]
     ):
-        m["tags"].append(record["id"])
+        m["tags"].append(record["tag"])
 
 
 @db_required
