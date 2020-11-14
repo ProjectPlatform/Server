@@ -53,7 +53,7 @@ async def get_info(current_user: str, chat_id: str) -> Dict[str, Any]:
         "SELECT distinct tag FROM message_tags JOIN messages ON messages.id=message_id WHERE messages.chat_id=$1",
         chat_id,
     ):
-        res["tags"].append(record['tag'])
+        res["tags"].append(record["tag"])
     res["attachments"] = []
     for record in await config.db.fetch(
         "SELECT message_attachments.id as id FROM message_attachments JOIN messages ON messages.id=message_id WHERE messages.chat_id = $1",
@@ -190,12 +190,14 @@ async def create(
                     current_user,
                 ),
             )
-            await __add_user__(res, current_user, True)
+            await __add_user__(res, current_user, not is_personal)
     return await get_info(current_user, res)
 
 
 @db_required
 async def create_personal(current_user: str, user2: str) -> str:
+    if await get_personal_chat(current_user, user2):
+        raise PermissionDenied()
     u1 = await get_user_info(current_user, current_user)
     u2 = await get_user_info(current_user, user2)
     async with config.db.acquire() as con:
@@ -207,8 +209,7 @@ async def create_personal(current_user: str, user2: str) -> str:
                 is_user_expandable=False,
                 is_non_admin=True,
             )
-            await __add__user_to_chat__(res["id"], current_user, True)
-            await __add__user_to_chat__(res["id"], user2, True)
+            await __add_user__(res["id"], user2)
     return await get_info(current_user, res["id"])
 
 
@@ -226,7 +227,9 @@ async def set_non_admin(current_user: str, chat_id: str, value: bool) -> bool:
 
 
 @db_required
-async def __set_propperty__(current_user: str, chat_id: str, propperty: str, value: bool) -> bool:
+async def __set_propperty__(
+    current_user: str, chat_id: str, propperty: str, value: bool
+) -> bool:
     if await is_user_admin(current_user, chat_id) or (
         value and await __is_chat_non_admin__(chat_id)
     ):
@@ -242,6 +245,8 @@ async def __set_propperty__(current_user: str, chat_id: str, propperty: str, val
 
 @db_required
 async def set_user_expandable(current_user: str, chat_id: str, value: bool) -> bool:
+    if (await __get_info__(chat_id))["is_personal"]:
+        raise PermissionDenied()
     return await __set_propperty__(current_user, chat_id, "is_user_expandable", value)
 
 
@@ -249,14 +254,18 @@ async def set_user_expandable(current_user: str, chat_id: str, value: bool) -> b
 async def set_non_removable_messages(
     current_user: str, chat_id: str, value: bool
 ) -> bool:
-    return await __set_propperty__(current_user, chat_id, "non_removable_messages", value)
+    return await __set_propperty__(
+        current_user, chat_id, "non_removable_messages", value
+    )
 
 
 @db_required
 async def set_non_modifiable_messages(
     current_user: str, chat_id: str, value: bool
 ) -> bool:
-    return await __set_propperty__(current_user, chat_id, "non_modifiable_messages", value)
+    return await __set_propperty__(
+        current_user, chat_id, "non_modifiable_messages", value
+    )
 
 
 @db_required
@@ -265,7 +274,9 @@ async def set_auto_remove_messages(
 ) -> bool:
     async with config.db.acquire() as con:
         async with con.transaction():
-            await __set_propperty__(current_user, chat_id, "non_removable_messages", value)
+            await __set_propperty__(
+                current_user, chat_id, "non_removable_messages", value
+            )
             await config.db.execute(
                 "UPDATE chats SET auto_remove_period=$1 WHERE id=$2", period, chat_id
             )
@@ -452,3 +463,13 @@ async def get_chats_for_user(user_id: str) -> List[str]:
     for idx, item in enumerate(chat_list):
         chat_list[idx] = item["chat_id"]
     return chat_list
+
+
+@db_required
+async def get_personal_chat(user1: str, user2: str) -> Optional[str]:
+    chat_list = await get_chats_for_user(user1)
+    for chat_id in chat_list:
+        chat = await __get_info__(chat_id)
+        if chat["is_personal"] and await has_user(user2, chat_id):
+            return chat_id
+    return None
