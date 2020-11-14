@@ -12,3 +12,15 @@ class EmailTaken(Exception):
 
 class AuthenticationError(Exception):
     pass
+
+
+class PermissionDenied(Exception):
+    pass
+
+
+class ObjectNotFound(Exception):
+    pass
+
+
+class InvalidRange(Exception):
+    pass
