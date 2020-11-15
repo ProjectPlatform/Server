@@ -270,7 +270,7 @@ async def set_non_modifiable_messages(
 
 @db_required
 async def set_auto_remove_messages(
-    current_user: str, chat_id: str, value: bool, period: Optional[int]
+    current_user: str, chat_id: str, value: bool, period: Optional[int] = None
 ) -> bool:
     async with config.db.acquire() as con:
         async with con.transaction():
@@ -376,8 +376,8 @@ async def send_message(
     current_user: str,
     chat_id: str,
     body: str,
-    attachments: Optional[List[Tuple[int, str]]],
-    tags: Optional[List[str]],
+    attachments: Optional[List[Tuple[int, str]]] = None,
+    tags: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     if not await has_user(current_user, chat_id):
         raise PermissionDenied()
@@ -410,8 +410,8 @@ async def edit_message(
     current_user: str,
     message_id: str,
     body: str,
-    attachments: Optional[List[Tuple[int, str]]],
-    tags: Optional[List[str]],
+    attachments: Optional[List[Tuple[int, str]]] = None,
+    tags: Optional[List[str]] = None,
 ) -> bool:
     m = await __get_message__(message_id)
     c = await __get_info__(m["chat_id"])
