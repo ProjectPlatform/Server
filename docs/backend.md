@@ -1,6 +1,6 @@
 This document describes the functions in the backend package. All exceptions are in the backend.exceptions module.
 
-# ~async backend.init(settings: Settings)~
+# `async backend.init(settings: Settings)`
 Initialise the database connection. This function must be called during application startup.
 
 ## Arguments
