@@ -473,3 +473,19 @@ async def get_personal_chat(user1: str, user2: str) -> Optional[str]:
         if chat["is_personal"] and await has_user(user2, chat_id):
             return chat_id
     return None
+
+
+@db_required
+async def get_messages_with_tag(
+    current_user: str, chat_id: str, tag: str
+) -> List[Dict[str, Any]]:
+    if not await has_user(current_user, chat_id):
+        raise PermissionDenied()
+    message_list = await config.db.fetch(
+        "SELECT messages.id AS id FROM message_tags JOIN messages ON messages.id=message_id WHERE messages.chat_id=$1 AND tag=$2",
+        chat_id,
+        tag,
+    )
+    for idx, item in enumerate(message_list):
+        message_list[idx] = await __get_message__(item["id"], True)
+    return message_list
