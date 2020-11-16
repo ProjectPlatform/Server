@@ -17,7 +17,7 @@ router = APIRouter()
 @router.post("/get_info", response_model=ChatOut)
 async def req_get_info(*, info: ChatMinimalInfo = Body(...)) -> Dict[str, Any]:
     try:
-        received_info = await get_info(*jsonable_encoder(info))
+        received_info = await get_info(**info.dict())
         return received_info
     except ObjectNotFound:
         raise HTTPException(status_code=404, detail="Page not found")
@@ -28,7 +28,7 @@ async def req_get_info(*, info: ChatMinimalInfo = Body(...)) -> Dict[str, Any]:
 @router.post("/add_user")
 async def req_add_user(info: ChatMinimalInfo, user_to_add: str) -> Any:
     try:
-        result = await add_user(*jsonable_encoder(info), user_to_add=user_to_add)
+        result = await add_user(**info.dict(), user_to_add=user_to_add)
         return {'result': result}
     except PermissionDenied:
         raise HTTPException(status_code=401, detail="Permission denied")
@@ -37,7 +37,7 @@ async def req_add_user(info: ChatMinimalInfo, user_to_add: str) -> Any:
 @router.delete("/remove_user")
 async def req_remove_user(*, info: ChatMinimalInfo, user_to_remove: str = Body(...)) -> Any:
     try:
-        result = await remove_user(*jsonable_encoder(info), user_to_remove=user_to_remove)
+        result = await remove_user(**info.dict(), user_to_remove=user_to_remove)
         return {'result': result}
     except PermissionDenied:
         raise HTTPException(status_code=401, detail="Permission denied")
@@ -46,7 +46,7 @@ async def req_remove_user(*, info: ChatMinimalInfo, user_to_remove: str = Body(.
 @router.post('/make_user_admin')
 async def req_make_user_admin(info: ChatMinimalInfo, target_user: str) -> Any:
     try:
-        result = await make_user_admin(*jsonable_encoder(info), target_user=target_user)
+        result = await make_user_admin(**info.dict(), target_user=target_user)
         return {'result': result}
     except PermissionDenied:
         raise HTTPException(status_code=401, detail="Permission denied")
@@ -55,7 +55,8 @@ async def req_make_user_admin(info: ChatMinimalInfo, target_user: str) -> Any:
 @router.post('/create')
 async def req_create_chat(info: ChatCreate) -> Any:
     try:
-        chat = await create(*jsonable_encoder(info))
+        #chat = await create("str","str",0,False,False,False, False, False,False, False,0,False)
+        chat = await create(**info.dict())
         return chat
     except PermissionDenied:
         raise HTTPException(status_code=401, detail="Permission denied")
