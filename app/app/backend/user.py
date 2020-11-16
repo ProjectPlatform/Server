@@ -2,7 +2,7 @@ from pydantic import EmailStr
 from typing import Optional, Dict, Any
 from app.app.backend.utils import db_required, insert_with_unique_id
 from app.app.backend import config
-from app.app.backend.exceptions import NickTaken, EmailTaken, AuthenticationError
+from app.app.backend.exceptions import NickTaken, EmailTaken, AuthenticationError, ObjectNotFound
 from passlib.hash import pbkdf2_sha256
 from asyncpg.exceptions import UniqueViolationError
 

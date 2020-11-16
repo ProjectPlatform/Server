@@ -195,7 +195,7 @@ async def create(
 
 
 @db_required
-async def create_personal(current_user: str, user2: str) -> str:
+async def create_personal(current_user: str, user2: str) -> Dict[str, Any]:
     if await get_personal_chat(current_user, user2):
         raise PermissionDenied()
     u1 = await get_user_info(current_user, current_user)

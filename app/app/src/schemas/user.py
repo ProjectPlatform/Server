@@ -13,14 +13,25 @@ from pydantic import BaseModel, EmailStr
 
 
 # Properties to receive via API on creation
-class UserCreate(BaseModel,):
+class UserCreate(BaseModel):
     nick: str
     password: str
     email: EmailStr
     name: str
+    #
+    # class Config:
+    #     arbitrary_types_allowed = True
 
-    class Config:
-        arbitrary_types_allowed = True
+
+class UserAuth(BaseModel):
+    nick: str
+    password: str
+
+
+class UserOut(BaseModel):
+    nick: str
+    name: str
+    avatar_id: int
 
 #
 # # Properties to receive via API on update
