@@ -14,7 +14,7 @@ from app.app.src.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTE
 router = APIRouter()
 
 
-@router.post("/token", response_model=schemas.Token)
+@router.post("/login", response_model=schemas.Token)
 async def login_for_access_token(form_data: UserAuth):
     try:
         user_auth = await user.authenticate(nick=form_data.nick, password=form_data.password)
@@ -30,9 +30,9 @@ async def login_for_access_token(form_data: UserAuth):
         )
         return {"access_token": access_token, "token_type": "bearer"}
     except NotInitialised:
-        HTTPException(status_code=422, detail="Sorry, database was not initialized")
+        HTTPException(status_code=501, detail="Sorry, database was not initialized")
     except AuthenticationError:
-        raise HTTPException(status_code=422, detail="Invalid username or password")
+        raise HTTPException(status_code=400, detail="Invalid username or password")
 
 
 @router.post("/registration")
@@ -47,7 +47,7 @@ async def create_user(
         # Add email send
         return {"status": "ok"}
     except NotInitialised:
-        HTTPException(status_code=422, detail="Sorry, database was not initialized")
+        HTTPException(status_code=501, detail="Sorry, database was not initialized")
     except NickTaken:
         raise HTTPException(status_code=422, detail="Nick is taken")
     except EmailTaken:

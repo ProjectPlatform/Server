@@ -22,7 +22,7 @@ async def req_get_info(*, info: ChatMinimalInfo = Body(...)) -> Dict[str, Any]:
     except ObjectNotFound:
         raise HTTPException(status_code=404, detail="Page not found")
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.post("/add_user")
@@ -31,7 +31,7 @@ async def req_add_user(info: ChatMinimalInfo, user_to_add: str) -> Any:
         result = await add_user(*jsonable_encoder(info), user_to_add=user_to_add)
         return {'result': result}
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.delete("/remove_user")
@@ -40,7 +40,7 @@ async def req_remove_user(*, info: ChatMinimalInfo, user_to_remove: str = Body(.
         result = await remove_user(*jsonable_encoder(info), user_to_remove=user_to_remove)
         return {'result': result}
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.post('/make_user_admin')
@@ -49,7 +49,7 @@ async def req_make_user_admin(info: ChatMinimalInfo, target_user: str) -> Any:
         result = await make_user_admin(*jsonable_encoder(info), target_user=target_user)
         return {'result': result}
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.post('/create')
@@ -57,8 +57,8 @@ async def req_create_chat(info: ChatCreate) -> Any:
     try:
         chat = await create(*jsonable_encoder(info))
         return chat
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Something went wrong, but we are already working on it :)")
+    except PermissionDenied:
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.post('/create_personal')
@@ -67,7 +67,7 @@ async def req_create_personal(current_user: str, user2: str) -> Dict[str, Any]:
         chat = await create_personal(current_user=current_user, user2=user2)
         return chat
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.post('/set_non_admin')
@@ -76,7 +76,7 @@ async def req_set_non_admin(current_user: str, chat_id: str, value: bool) -> Any
         result = await set_non_admin(current_user=current_user, chat_id=chat_id, value=value)
         return {'result': result}
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.post('/set_user_expandable')
@@ -85,7 +85,7 @@ async def req_set_user_expandable(current_user: str, chat_id: str, value: bool) 
         result = await set_user_expandable(current_user=current_user, chat_id=chat_id, value=value)
         return {'result': result}
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.post('/set_non_removable_messages')
@@ -94,7 +94,7 @@ async def req_set_non_removable_messages(current_user: str, chat_id: str, value:
         result = await set_non_removable_messages(current_user=current_user, chat_id=chat_id, value=value)
         return {'result': result}
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.post('/set_non_modifiable_messages')
@@ -103,7 +103,7 @@ async def req_set_non_modifiable_messages(current_user: str, chat_id: str, value
         result = await set_non_modifiable_messages(current_user=current_user, chat_id=chat_id, value=value)
         return {'result': result}
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.post('/set_auto_remove_messages')
@@ -112,7 +112,7 @@ async def req_set_auto_remove_messages(current_user: str, chat_id: str, value: b
         result = await set_auto_remove_messages(current_user=current_user, chat_id=chat_id, value=value)
         return {'result': result}
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.post('/set_digest_messages')
@@ -121,7 +121,7 @@ async def req_set_digest_messages(current_user: str, chat_id: str, value: bool) 
         result = await set_digest_messages(current_user=current_user, chat_id=chat_id, value=value)
         return {'result': result}
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.get('/get_message')
@@ -132,7 +132,7 @@ async def req_get_message(current_user: str, message_id: str) -> Any:
     except ObjectNotFound:
         raise HTTPException(status_code=404, detail="Page not found")
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.get('/get_message_range')
@@ -144,7 +144,7 @@ async def req_get_message_range(current_user: str, lower_id: Optional[str], uppe
     except ObjectNotFound:
         raise HTTPException(status_code=404, detail="Page not found")
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.post('/send_message')
@@ -156,7 +156,7 @@ async def req_send_message(current_user: str, chat_id: str, body: str,
                                      tags=tags)
         return message
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.post('/edit_message')
@@ -168,7 +168,7 @@ async def req_edit_message(current_user: str, chat_id: str, body: str,
                                      tags=tags, )
         return message
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
 @router.delete('/delete_message')
@@ -177,24 +177,24 @@ async def req_delete_message(current_user: str, message_id: str) -> Any:
         result = await delete_message(current_user=current_user, message_id=message_id)
         return {'result': result}
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
 
 
-@router.delete('/get_chats_for_user')
+@router.get('/get_chats_for_user')
 async def req_get_chats_for_user(user_id: str) -> Any:
     try:
         ids = await get_chats_for_user(user_id=user_id)
         return ids
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
     except Exception as e:
         raise HTTPException(status_code=500, detail="Something went wrong, but we are already working on it :)")
 
 
-@router.delete('/get_messages_with_tag')
+@router.get('/get_messages_with_tag')
 async def req_get_messages_with_tag(current_user: str, chat_id: str, tag: str) -> Any:
     try:
         messages = await get_messages_with_tag(current_user=current_user, chat_id=chat_id, tag=tag)
         return messages
     except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        raise HTTPException(status_code=401, detail="Permission denied")
