@@ -47,7 +47,7 @@
     * Status code 404
 
 ## Chats
-#### URL `/get_info` -> *Obtain information about a chat.*
+#### URL `/chats/get_info` -> *Obtain information about a chat.*
 * **Arguments**
 ```
 {
@@ -85,7 +85,7 @@
     * Status code 401
     * Status code 404
 
-#### URL `/add_user` -> *Add a user to the chat with the given id.*
+#### URL `/chats/add_user` -> *Add a user to the chat with the given id.*
 * **Arguments**
 
 > **In query** `user_to_add: string` +
@@ -100,7 +100,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/remove_user` -> *Remove a user from the chat with the given id.*
+#### URL `/chats/remove_user` -> *Remove a user from the chat with the given id.*
 * **Arguments**
 ```
 {
@@ -116,7 +116,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/make_user_admin` -> *Make a user an admin of the given chat.*
+#### URL `/chats/make_user_admin` -> *Make a user an admin of the given chat.*
 * **Arguments**
 
 > **In query** `target_user: string`
@@ -131,7 +131,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/create` -> *Create a new chat.*
+#### URL `/chats/create` -> *Create a new chat.*
 * **Arguments**
 ```
 {
@@ -154,7 +154,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/create_personal` -> *Create a personal chat with another user.*
+#### URL `/chats/create_personal` -> *Create a personal chat with another user.*
 * **Arguments**
 > **In query** `current_user: string, user2: string`
 * **Return value** - the same as get_info.
@@ -162,7 +162,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/set_non_admin` -> *Set the value of the non_admin property*
+#### URL `/chats/set_non_admin` -> *Set the value of the non_admin property*
 * **Arguments**
 > **In query** `current_user: string, chat_id: string, value: bool`
 * **Return value** - JSON string `{'result': result}`.
@@ -170,7 +170,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/set_user_expandable` -> *Set the value of the user_expandable property*
+#### URL `/chats/set_user_expandable` -> *Set the value of the user_expandable property*
 * **Arguments**
 > **In query** `current_user: string, chat_id: string, value: bool`
 * **Return value** - JSON string `{'result': result}`.
@@ -178,7 +178,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/set_non_removable_messages` -> *Set the value of the non_removable_messages property*
+#### URL `/chats/set_non_removable_messages` -> *Set the value of the non_removable_messages property*
 * **Arguments**
 > **In query** `current_user: string, chat_id: string, value: bool`
 * **Return value** - JSON string `{'result': result}`.
@@ -186,7 +186,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/set_non_modifiable_messages` -> *Set the value of the non_modifiable_messages property*
+#### URL `/chats/set_non_modifiable_messages` -> *Set the value of the non_modifiable_messages property*
 * **Arguments**
 > **In query** `current_user: string, chat_id: string, value: bool`
 * **Return value** - JSON string `{'result': result}`.
@@ -194,7 +194,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/set_auto_remove_messages` -> *Set the value of the auto_remove_messages property*
+#### URL `/chats/set_auto_remove_messages` -> *Set the value of the auto_remove_messages property*
 * **Arguments**
 > **In query** `current_user: string, chat_id: string, value: bool`
 * **Return value** - JSON string `{'result': result}`.
@@ -202,7 +202,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/set_digest_messages` -> *Set the value of the digest_messages property*
+#### URL `/chats/set_digest_messages` -> *Set the value of the digest_messages property*
 * **Arguments**
 > **In query** `current_user: string, chat_id: string, value: bool`
 * **Return value** - JSON string `{'result': result}`.
@@ -210,7 +210,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/get_message` -> *Get the contents of a message.*
+#### URL `/chats/get_message` -> *Get the contents of a message.*
 * **Arguments**
 > **In query** `current_user: string, message_id: string`
 * **Return value** - a dict containing the following keys:
@@ -227,7 +227,7 @@
     * Status code 401
     * Status code 404
 
-#### URL `/get_message_range` -> *Retrieve a range of messages.*
+#### URL `/chats/get_message_range` -> *Retrieve a range of messages.*
 * **Arguments**
 > **In query** `current_user: string, lower_id: string, upper_id:string, limit: int`
 * **Return value** - A list of messages in the requested range in chronological order (from oldest to newest).
@@ -236,7 +236,7 @@
     * Status code 401
     * Status code 404
 
-#### URL `/send_message` -> *Send a message to the specified chat.*
+#### URL `/chats/send_message` -> *Send a message to the specified chat.*
 * **Arguments**
 > **In query** `current_user: string, chat_id: string, body: string`
 * **Return value** - the sent message.
@@ -244,7 +244,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/edit_message` -> *Edit a message.*
+#### URL `/chats/edit_message` -> *Edit a message.*
 * **Arguments**
 > **In query** `current_user: string, chat_id: string, body: string`
 * **Return value** - JSON string `{'result': result}`.
@@ -252,7 +252,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/delete_message` -> *Delete a message.*
+#### URL `/chats/delete_message` -> *Delete a message.*
 * **Arguments**
 > **In query** `current_user: string, message_id: string`
 * **Return value** - JSON string `{'result': result}`.
@@ -260,7 +260,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/get_chats_for_user` -> *Retrieve the list of chats for a user.*
+#### URL `/chats/get_chats_for_user` -> *Retrieve the list of chats for a user.*
 * **Arguments**
 > **In query** `user_id: string`
 * **Return value** - a list of ids of the chats in which the user is participating.
@@ -268,7 +268,7 @@
 * **Exceptions**
     * Status code 401
 
-#### URL `/get_messages_with_tag` -> *Retrieve all messages with the specified tag from the specified chat*
+#### URL `/chats/get_messages_with_tag` -> *Retrieve all messages with the specified tag from the specified chat*
 * **Arguments**
 > **In query** `current_user: string, chat_id: string, tag: string`
 * **Return value** - a list of messages.
