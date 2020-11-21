@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import Depends, HTTPException, status
 from fastapi import APIRouter
+from fastapi.security import OAuth2PasswordRequestForm
 
 from app.app.backend.exceptions import NotInitialised
 from app.app.src import schemas
@@ -15,10 +16,10 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=schemas.Token)
-async def login_for_access_token(form_data: UserAuth):
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     try:
-        user_auth = await user.authenticate(nick=form_data.nick, password=form_data.password)
-        if not user_auth:
+        user_id = await user.authenticate(nick=form_data.username, password=form_data.password)
+        if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password",
@@ -26,13 +27,13 @@ async def login_for_access_token(form_data: UserAuth):
             )
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
-            data={"sub": form_data.nick}, expires_delta=access_token_expires
+            data={"sub": str(user_id)}, expires_delta=access_token_expires
         )
         return {"access_token": access_token, "token_type": "bearer"}
     except NotInitialised:
         HTTPException(status_code=501, detail="Sorry, database was not initialized")
     except AuthenticationError:
-        raise HTTPException(status_code=400, detail="Invalid username or password")
+        raise HTTPException(status_code=401, detail="Invalid username or password")
 
 
 @router.post("/registration")
