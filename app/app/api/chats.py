@@ -1,3 +1,4 @@
+import json
 from typing import Dict, Any, Optional, List, Tuple
 
 from fastapi import APIRouter, HTTPException, Body, Depends, Query
@@ -165,6 +166,7 @@ async def req_get_message_range(lower_id: Optional[int] = None, upper_id: Option
 async def req_send_message(chat_id: int, body: str = Body(...),
                            attachments: Optional[List[Tuple[int, str]]] = (0, 0)
                            , tags: Optional[List[str]] = None, token: str = Depends(decode_token), ) -> Any:
+    # TODO fix request in docs
     try:
         user_id = token["id"]
         message = await send_message(current_user=user_id, chat_id=chat_id, body=body, attachments=attachments,
@@ -202,7 +204,7 @@ async def req_get_chats_for_user(token: str = Depends(decode_token)) -> Any:
     try:
         user_id = token["id"]
         ids = await get_chats_for_user(user_id=user_id)
-        return ids
+        return {'chats': ids}
     except PermissionDenied:
         raise HTTPException(status_code=401, detail="Permission denied")
     # except Exception as e:
