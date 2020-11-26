@@ -17,6 +17,16 @@ router = APIRouter()
 
 @router.post("/login", response_model=schemas.Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    """
+    **Authenticate a user**
+
+    Return the **id** of the authenticated account
+
+    **Exceptions**
+    * Status code **400**
+    * Status code **401**
+    * Status code **501**
+    """
     try:
         user_id = await user.authenticate(nick=form_data.username, password=form_data.password)
         if not user_id:
@@ -41,8 +51,14 @@ async def create_user(
         user_in: schemas.UserCreate,
 ) -> Any:
     """
-        Create new user.
-        """
+    **Create a user account.**
+
+    Returns JSON string ```{'result': true}```
+
+    **Exceptions:**
+    * Status code **422**
+    * Status code **501**
+    """
     try:
         await user.register(nick=user_in.nick, password=user_in.password, email=user_in.email, name=user_in.name)
         # Add email send
