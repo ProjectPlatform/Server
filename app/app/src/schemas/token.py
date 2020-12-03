@@ -12,5 +12,9 @@ class TokenPayload(BaseModel):
     sub: Optional[int] = None
 
 
+class TokenOut(Token):
+    id: int
+
+
 class TokenData(BaseModel):
     username: Optional[str] = None
