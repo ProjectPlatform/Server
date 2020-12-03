@@ -32,7 +32,7 @@ async def get_user_info(user_id: int, token: str = Depends(decode_token)):
         current_user_id = token["id"]
         user_info = await get_info(current_user=current_user_id, user_id=user_id)
         return user_info
-    except ObjectNotFound():
+    except ObjectNotFound:
         raise HTTPException(status_code=404, detail="Sorry, page not found")
 
 
