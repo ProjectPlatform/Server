@@ -1,5 +1,8 @@
 import logging
 import asyncio
+
+import firebase_admin
+
 from app.app.settings import Settings
 import os
 from app.app.backend import init as init_db
@@ -20,6 +23,7 @@ async def init() -> None:
 
 
 async def main() -> None:
+    default_app = firebase_admin.initialize_app()
     dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
     if os.path.exists(dotenv_path):
         load_dotenv(dotenv_path)
@@ -27,6 +31,6 @@ async def main() -> None:
     await init()
     logger.info("Initial data created")
 
-
+# TODO close loop
 loop = asyncio.get_event_loop()
 loop.create_task(main())
