@@ -70,7 +70,7 @@ A dict containing the following keys:
 - non_modifiable_messages_modified_by – The id of the user who last modified the non_modifiable_messages propperty.
 - auto_remove_messages – The value of the auto_remove_messages propperty.
 - auto_remove_messages_modified_by – The id of the user who last modified the auto_remove_messages propperty.
-- auto_remove_period – The lifetime of a message before it is automatically deleted.
+- auto_remove_period – The lifetime of a message before it is automatically deleted. Either None or an integer greater than 0.
 - digest_messages – The value of the digest_messages propperty (AutoLoggingMessages).
 - digest_messages_modified_by – The id of the user who last modified the digest_messages propperty.
 - admins – A list containing the user ids of the chat's admins.
@@ -238,6 +238,7 @@ Retrieve a range of messages.
 - lower_id – The id of the first message in the range, or None for the first message in the chat.
 - upper_id – The id of the last message in the range, or None for the last message in the chat.
 - limit – The maximum amount of messages to return.
+
 Note that lower_id and upper_id cannot be None at the same time.
 
 ### Return value
