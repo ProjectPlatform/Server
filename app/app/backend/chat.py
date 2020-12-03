@@ -1,26 +1,36 @@
+# import datetime
 from datetime import datetime
+import logging
+import shutil
+import uuid
 from typing import Optional, Any, Dict, List, Tuple
+
+from fastapi import UploadFile
+
 from app.app.backend import config
 from app.app.backend.utils import db_required, insert_with_unique_id
 from app.app.backend.exceptions import PermissionDenied, ObjectNotFound, InvalidRange
 from app.app.backend.user import get_user_info
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 @db_required
-async def has_user(user_id: str, chat_id: str):
+async def has_user(user_id: int, chat_id: int):
     return bool(
         await config.db.fetchrow(
-            "SELECT * FROM chat_memberships WHERE user_id = $1 AND chat_id = $2;",
+            "SELECT * FROM chat_participants WHERE participant_id = $1 AND chat_id = $2;",
             user_id,
             chat_id,
         )
     )
 
 
-async def is_user_admin(user_id: str, chat_id: str):
+async def is_user_admin(user_id: int, chat_id: int):
     return bool(
         await config.db.fetchrow(
-            "SELECT * FROM chat_memberships WHERE user_id = $1 AND chat_id = $2 AND is_admin;",
+            "SELECT * FROM chat_participants WHERE participant_id = $1 AND chat_id = $2 AND is_admin;",
             user_id,
             chat_id,
         )
@@ -28,86 +38,86 @@ async def is_user_admin(user_id: str, chat_id: str):
 
 
 @db_required
-async def __get_info__(chat_id: str) -> Dict[str, Any]:
+async def __get_info__(chat_id: int) -> Dict[str, Any]:
     if res := await config.db.fetchrow("SELECT * FROM chats WHERE id = $1", chat_id):
         return dict(res)
     raise ObjectNotFound()
 
 
 @db_required
-async def get_info(current_user: str, chat_id: str) -> Dict[str, Any]:
+async def get_info(current_user: int, chat_id: int) -> Dict[str, Any]:
     if not await has_user(current_user, chat_id):
         raise PermissionDenied()
     res = await __get_info__(chat_id)
     res["admins"] = []
     res["users"] = []
     for record in await config.db.fetch(
-        "SELECT user_id, is_admin FROM chat_memberships WHERE chat_id = $1", chat_id
+            "SELECT participant_id, is_admin FROM chat_participants WHERE chat_id = $1", chat_id
     ):
         if record["is_admin"]:
-            res["admins"].append(record["user_id"])
-        else:
-            res["users"].append(record["user_id"])
-    res["tags"] = []
-    for record in await config.db.fetch(
-        "SELECT distinct tag FROM message_tags JOIN messages ON messages.id=message_id WHERE messages.chat_id=$1",
-        chat_id,
-    ):
-        res["tags"].append(record["tag"])
-    res["attachments"] = []
-    for record in await config.db.fetch(
-        "SELECT message_attachments.id as id FROM message_attachments JOIN messages ON messages.id=message_id WHERE messages.chat_id = $1",
-        chat_id,
-    ):
-        res["attachments"].append(record["id"])
-    res["last_message_id"] = await config.db.fetchval(
-        "SELECT id FROM messages WHERE chat_id=$1 ORDER BY time DESC LIMIT 1",
-        chat_id,
-    )
+            res["admins"].append(record["participant_id"])
+        res["users"].append(record["participant_id"])
     return res
 
 
 @db_required
-async def __is_chat_non_admin__(chat_id: str) -> bool:
+async def __is_chat_non_admin__(chat_id: int) -> bool:
     return (await __get_info__(chat_id))["is_non_admin"]
 
 
 @db_required
-async def __add_user__(chat_id: str, user_to_add: str, is_admin: bool = False) -> bool:
+async def __add_user__(chat_id: int, user_to_add: int, is_admin: bool = False) -> bool:
+    # TODO add except on "chat_participants_participant_id_fkey"
     await insert_with_unique_id(
-        "chat_memberships",
-        ("user_id", "chat_id", "is_admin"),
+        "CHAT_PARTICIPANTS",
+        ("participant_id", "chat_id", "is_admin"),
         (user_to_add, chat_id, is_admin),
     )
     return True
 
 
 @db_required
-async def add_user(current_user: str, chat_id: str, user_to_add: str) -> bool:
+async def add_user(current_user: int, chat_id: int, user_to_add: int) -> bool:
+    # TODO wtf?
     if await has_user(current_user, chat_id):
         c = await __get_info__(chat_id)
-        if not c["is_personal"] and (
-            c["is_user_expandable"] or await is_user_admin(current_user, chat_id)
-        ):
-            if not await has_user(user_to_add, chat_id):
-                return await __add_user__(chat_id, user_to_add)
-            else:
-                return False
+        # if "is_personal" not in c["properties_list"] and (
+        #         "is_user_expandable" in c["properties_list"] or await is_user_admin(current_user, chat_id)
+        # ):
+        if not await has_user(user_to_add, chat_id):
+            return await __add_user__(chat_id, user_to_add)
+        else:
+            return False
     raise PermissionDenied()
 
 
 @db_required
-async def __remove_user__(chat_id: str, user_to_remove: str) -> bool:
+async def __remove_user__(chat_id: int, user_to_remove: int) -> bool:
+    # try:
+    # await config.db.execute(
+    #     "DELETE FROM chat_participants WHERE chat_id=$1 AND participant_id=$2",
+    #     chat_id,
+    #     user_to_remove,
+    #
     await config.db.execute(
-        "DELETE FROM chat_memberships WHERE chat_id=$1 AND user_id=$2",
+        "delete from chat_participants Where chat_id = $1 and participant_id = $2;",
         chat_id,
         user_to_remove,
     )
+    participants123 = dict(
+        await config.db.fetchrow("Select exists(select '*' from chat_participants Where chat_id = $1);",
+                                 chat_id))
+    logging.info(participants123)
+    if not participants123["exists"]:
+        await config.db.execute(
+            "DELETE FROM chats WHERE id = $1;",
+            chat_id,
+        )
     return True
 
 
 @db_required
-async def remove_user(current_user: str, chat_id: str, user_to_remove: str) -> bool:
+async def remove_user(current_user: int, chat_id: int, user_to_remove: int) -> bool:
     if await has_user(current_user, chat_id):
         if current_user == user_to_remove or await is_user_admin(current_user, chat_id):
             if await has_user(user_to_remove, chat_id):
@@ -118,11 +128,11 @@ async def remove_user(current_user: str, chat_id: str, user_to_remove: str) -> b
 
 
 @db_required
-async def make_user_admin(current_user: str, chat_id: str, target_user: str) -> bool:
+async def make_user_admin(current_user: str, chat_id: int, target_user: int) -> bool:
     if await is_user_admin(current_user, chat_id):
         if await has_user(target_user, chat_id):
             await config.db.execute(
-                "UPDATE chat_memberships SET is_admin=true WHERE chat_id=$1 AND user_id=$2",
+                "UPDATE chat_participants SET is_admin=true WHERE chat_id=$1 AND participant_id=$2",
                 chat_id,
                 target_user,
             )
@@ -134,68 +144,40 @@ async def make_user_admin(current_user: str, chat_id: str, target_user: str) -> 
 
 @db_required
 async def create(
-    current_user: str,
-    name: str,
-    colour: int = 0,
-    is_encrypted: bool = False,
-    is_personal: bool = False,
-    is_user_expandable: bool = False,
-    is_non_admin: bool = False,
-    non_removable_messages: bool = False,
-    non_modifiable_messages: bool = False,
-    auto_remove_messages: bool = False,
-    auto_remove_period: Optional[int] = None,
-    digest_messages: bool = False,
+        current_user_id: int,
+        name: str,
+        avatar: Optional[str],
+        color_rgba: int,
+        encoded: bool,
+        #  properties_list: List[str],
 ) -> Dict[str, Any]:
     async with config.db.acquire() as con:
         async with con.transaction():
-            res = await insert_with_unique_id(
+            res_id = await insert_with_unique_id(
                 "chats",
                 (
                     "name",
-                    "colour",
-                    "is_encrypted",
-                    "is_personal",
-                    "is_user_expandable",
-                    "is_non_admin",
-                    "non_removable_messages",
-                    "non_modifiable_messages",
-                    "auto_remove_messages",
-                    "auto_remove_period",
-                    "digest_messages",
-                    "is_user_expandable_modified_by",
-                    "is_non_admin_modified_by",
-                    "non_removable_messages_modified_by",
-                    "non_modifiable_messages_modified_by",
-                    "auto_remove_messages_modified_by",
-                    "digest_messages_modified_by",
+                    "creator",
+                    "avatar",
+                    "COLOR_RGBA",
+                    "ENCODED",
+                    # "PROPERTIES_LIST",
                 ),
                 (
                     name,
-                    colour,
-                    is_encrypted,
-                    is_personal,
-                    is_user_expandable,
-                    is_non_admin,
-                    non_removable_messages,
-                    non_modifiable_messages,
-                    auto_remove_messages,
-                    auto_remove_period,
-                    digest_messages,
-                    current_user,
-                    current_user,
-                    current_user,
-                    current_user,
-                    current_user,
-                    current_user,
+                    current_user_id,
+                    avatar,
+                    color_rgba,
+                    encoded,
+                    #     properties_list,
                 ),
             )
-            await __add_user__(res, current_user, not is_personal)
-    return await get_info(current_user, res)
+            await __add_user__(res_id, current_user_id, True)
+    return await get_info(current_user_id, res_id)
 
 
 @db_required
-async def create_personal(current_user: str, user2: str) -> Dict[str, Any]:
+async def create_personal(current_user: int, user2: int) -> Dict[str, Any]:
     if await get_personal_chat(current_user, user2):
         raise PermissionDenied()
     u1 = await get_user_info(current_user, current_user)
@@ -227,11 +209,11 @@ async def set_non_admin(current_user: str, chat_id: str, value: bool) -> bool:
 
 
 @db_required
-async def __set_propperty__(
-    current_user: str, chat_id: str, propperty: str, value: bool
+async def __set_property__(
+        current_user: str, chat_id: str, propperty: str, value: bool
 ) -> bool:
     if await is_user_admin(current_user, chat_id) or (
-        value and await __is_chat_non_admin__(chat_id)
+            value and await __is_chat_non_admin__(chat_id)
     ):
         await config.db.execute(
             f"UPDATE chats SET {propperty}=$1, {propperty}_modified_by=$2 WHERE id=$3",
@@ -247,34 +229,34 @@ async def __set_propperty__(
 async def set_user_expandable(current_user: str, chat_id: str, value: bool) -> bool:
     if (await __get_info__(chat_id))["is_personal"]:
         raise PermissionDenied()
-    return await __set_propperty__(current_user, chat_id, "is_user_expandable", value)
+    return await __set_property__(current_user, chat_id, "is_user_expandable", value)
 
 
 @db_required
 async def set_non_removable_messages(
-    current_user: str, chat_id: str, value: bool
+        current_user: str, chat_id: str, value: bool
 ) -> bool:
-    return await __set_propperty__(
+    return await __set_property__(
         current_user, chat_id, "non_removable_messages", value
     )
 
 
 @db_required
 async def set_non_modifiable_messages(
-    current_user: str, chat_id: str, value: bool
+        current_user: str, chat_id: str, value: bool
 ) -> bool:
-    return await __set_propperty__(
+    return await __set_property__(
         current_user, chat_id, "non_modifiable_messages", value
     )
 
 
 @db_required
 async def set_auto_remove_messages(
-    current_user: str, chat_id: str, value: bool, period: Optional[int] = None
+        current_user: str, chat_id: str, value: bool, period: Optional[int] = None
 ) -> bool:
     async with config.db.acquire() as con:
         async with con.transaction():
-            await __set_propperty__(
+            await __set_property__(
                 current_user, chat_id, "non_removable_messages", value
             )
             await config.db.execute(
@@ -285,86 +267,93 @@ async def set_auto_remove_messages(
 
 @db_required
 async def set_digest_messages(current_user: str, chat_id: str, value: bool) -> bool:
-    return await __set_propperty__(current_user, chat_id, "digest_messages", value)
+    return await __set_property__(current_user, chat_id, "digest_messages", value)
 
 
 @db_required
 async def __message_add_extra_fields__(m: Dict[str, Any]) -> None:
     m["attachments"] = []
     for record in await config.db.fetch(
-        "SELECT id FROM message_attachments WHERE message_id=$1", m["id"]
+            "SELECT id FROM message_attachments WHERE message_id=$1", m["id"]
     ):
         m["attachments"].append(record["id"])
     m["tags"] = []
     for record in await config.db.fetch(
-        "SELECT tag FROM message_tags WHERE message_id=$1", m["id"]
+            "SELECT tag_list FROM messages WHERE id=$1", m["id"]
     ):
-        m["tags"].append(record["tag"])
+        m["tags"].append(record["tag_list"])
 
 
 @db_required
 async def __get_message__(
-    message_id: str, include_extra_fields: bool = False
+        message_id: int, include_extra_fields: bool = False
 ) -> Dict[str, Any]:
     if res := await config.db.fetchrow(
-        "SELECT * FROM messages WHERE id=$1", message_id
+            "SELECT * FROM messages WHERE id=$1", message_id
     ):
         res = dict(res)
-        if include_extra_fields:
-            await __message_add_extra_fields__(res)
+        # if include_extra_fields:
+        #     await __message_add_extra_fields__(res)
         return res
     raise ObjectNotFound()
 
 
 @db_required
-async def get_message(current_user: str, message_id: str):
+async def get_message(current_user: int, message_id: int):
     m = await __get_message__(message_id, True)
-    if await has_user(current_user, m["chat_id"]):
+    if await has_user(current_user, m["chat_attached_id"]):
         return m
     raise PermissionDenied()
 
 
 @db_required
 async def get_message_range(
-    current_user: str, lower_id: Optional[str], upper_id: Optional[str], limit: int = 50
+        current_user: int, chat_id: int, limit: int = 50
 ) -> List[Dict[str, Any]]:
-    if not lower_id and not upper_id:
-        raise InvalidRange()
-    lower_message = await __get_message__(lower_id) if lower_id else None
-    upper_message = await __get_message__(upper_id) if upper_id else None
-    if (lower_message and upper_message) and (
-        lower_message["chat_id"] != upper_message["chat_id"]
-    ):
-        raise InvalidRange()
-    chat_id = lower_message["chat_id"] if lower_message else upper_message["chat_id"]
-    if not await has_user(current_user, chat_id):
-        raise PermissionDenied()
-    if lower_message and upper_message:
+    if await has_user(current_user, chat_id):
+        # if not lower_id and not upper_id:
+        #     raise InvalidRange()
+        # lower_message = await __get_message__(lower_id) if lower_id else None
+        # upper_message = await __get_message__(upper_id) if upper_id else None
+        # if (lower_message and upper_message) and (
+        #         lower_message["chat_attached_id"] != upper_message["chat_attached_id"]
+        # ):
+        #     raise InvalidRange()
+        # chat_id = lower_message["chat_attached_id"] if lower_message else upper_message["chat_attached_id"]
+        # if not await has_user(current_user, chat_id):
+        #     raise PermissionDenied()
+        # if lower_message and upper_message:
+        # lower_message = datetime.date(lower_id)
+        # upper_message = datetime.date(upper_id)
+
+        # lower_message = datetime.strptime(lower_date, "%Y-%m-%d %H:%M:%S.%f %z")
+        # upper_message = datetime.strptime(upper_date, "%Y-%m-%d %H:%M:%S.%f %z")
+
         message_list = await config.db.fetch(
-            "SELECT * FROM messages WHERE chat_id=$1 AND time BETWEEN $2 AND $3 ORDER BY time LIMIT $4",
+            "select * from messages where chat_attached_id = $1 and sent_time > ('2010-9-29 23:24:51.154352+03')::timestamptz Order by sent_time desc LIMIT $2;",
+            # "select * from messages where chat_attached_id = $1 and sent_time between $2 and $3 LIMIT $4;",
             chat_id,
-            lower_message["time"],
-            upper_message["time"],
             limit,
         )
-    elif not lower_message:
-        message_list = await config.db.fetch(
-            "SELECT * FROM messages WHERE chat_id=$1 AND time <= $2 ORDER BY time LIMIT $3",
-            chat_id,
-            upper_message["time"],
-            limit,
-        )
-    elif not upper_message:
-        message_list = await config.db.fetch(
-            "SELECT * FROM messages WHERE chat_id=$1 AND time >= $2 ORDER BY time LIMIT $3",
-            chat_id,
-            lower_message["time"],
-            limit,
-        )
-    for idx, item in enumerate(message_list):
-        message_list[idx] = dict(item)
-        await __message_add_extra_fields__(message_list[idx])
-    return message_list
+        # elif not lower_message:
+        #     message_list = await config.db.fetch(
+        #         "SELECT * FROM messages WHERE chat_attached_id=$1 AND sent_time <= $2 ORDER BY sent_time DESC LIMIT $3",
+        #         chat_id,
+        #         upper_message["sent_time"],
+        #         limit,
+        #     )
+        # elif not upper_message:
+        #     message_list = await config.db.fetch(
+        #         "SELECT * FROM messages WHERE chat_attached_id=$1 AND sent_time >= $2 ORDER BY sent_time DESC LIMIT $3",
+        #         chat_id,
+        #         lower_message["sent_time"],
+        #         limit,
+        #     )
+        # for idx, item in enumerate(message_list):
+        #     message_list[idx] = dict(item)
+        #     await __message_add_extra_fields__(message_list[idx])
+        return message_list
+    raise PermissionDenied()
 
 
 ATTACHMENT_IMAGE = 0
@@ -373,49 +362,64 @@ ATTACHMENT_DOCUMENT = 1
 
 @db_required
 async def send_message(
-    current_user: str,
-    chat_id: str,
-    body: str,
-    attachments: Optional[List[Tuple[int, str]]] = None,
-    tags: Optional[List[str]] = None,
+        current_user: int,
+        chat_id: int,
+        body: str,
+        attachments: Optional[List[int]] = None,
+        tags: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
+    if attachments:
+        has_attached_file = True
+    else:
+        has_attached_file = False
     if not await has_user(current_user, chat_id):
         raise PermissionDenied()
     async with config.db.acquire() as con:
         async with con.transaction():
             res = await insert_with_unique_id(
                 "messages",
-                ("chat_id", "author_id", "body", "time"),
-                (chat_id, current_user, body, datetime.now()),
+                ("chat_attached_id", "author_id", "tag_list", "body", "has_attached_file"),
+                (chat_id, current_user, tags, body, has_attached_file),
             )
             if attachments:
                 for a in attachments:
-                    if a[0] == ATTACHMENT_IMAGE:
-                        col = "image_id"
-                    elif a[0] == ATTACHMENT_DOCUMENT:
-                        col = "document_id"
                     await insert_with_unique_id(
-                        "message_attachments", ("message_id", col), (res, a[1])
+                        "message_attachments", ("message_id", "attached_doc"), (res, a)
                     )
-            if tags:
-                for t in tags:
-                    await insert_with_unique_id(
-                        "message_tags", ("message_id", "tag"), (res, t)
-                    )
+            # if tags:
+            #     for t in tags:
+            #         await insert_with_unique_id(
+            #             "message_tags", ("message_id", "tag"), (res, t)
+            #         )
     return await __get_message__(res, True)
 
 
 @db_required
+async def create_upload_file(uploaded_file: UploadFile, current_user: int, description: str, is_showable: bool) -> int:
+    file_id = uuid.uuid4()
+    file_location = f"app/app/attachments/{file_id}"
+    with open(file_location, "wb+") as file_object:
+        shutil.copyfileobj(uploaded_file.file, file_object)
+    attachment_id = await insert_with_unique_id("sources", ("is_showable", "path_original", "path_thumbnail", "owner",
+                                                            "description", "meta"),
+                                                (is_showable, file_location, file_location,
+                                                 current_user, description, "meta"))
+    return attachment_id
+
+
+@db_required
 async def edit_message(
-    current_user: str,
-    message_id: str,
-    body: str,
-    attachments: Optional[List[Tuple[int, str]]] = None,
-    tags: Optional[List[str]] = None,
+        current_user: int,
+        message_id: int,
+        body: str,
+        attachments: Optional[List[Tuple[int, str]]] = None,
+        tags: Optional[List[str]] = None,
 ) -> bool:
     m = await __get_message__(message_id)
-    c = await __get_info__(m["chat_id"])
-    if m["author_id"] != current_user or c["non_modifiable_messages"]:
+    c = await __get_info__(m["chat_attached_id"])
+    # or c["non_modifiable_messages"]
+    if m["author_id"] != current_user:
+        # or c["non_modifiable_messages"]
         raise PermissionDenied()
     async with config.db.acquire() as con:
         async with con.transaction():
@@ -425,9 +429,9 @@ async def edit_message(
             await config.db.execute(
                 "DELETE FROM message_attachments WHERE message_id=$1", message_id
             )
-            await config.db.execute(
-                "DELETE FROM message_tags WHERE message_id=$1", message_id
-            )
+            # await config.db.execute(
+            #     "DELETE FROM message_tags WHERE message_id=$1", message_id
+            # )
             if attachments:
                 for a in attachments:
                     if a[0] == ATTACHMENT_IMAGE:
@@ -437,19 +441,20 @@ async def edit_message(
                     await insert_with_unique_id(
                         "message_attachments", ("message_id", col), (message_id, a[1])
                     )
-            if tags:
-                for t in tags:
-                    await insert_with_unique_id(
-                        "message_tags", ("message_id", "tag"), (message_id, t)
-                    )
+            # if tags:
+            #     for t in tags:
+            #         await insert_with_unique_id(
+            #             "message_tags", ("message_id", "tag"), (message_id, t)
+            #         )
     return True
 
 
 @db_required
-async def delete_message(current_user: str, message_id: str) -> bool:
+async def delete_message(current_user: int, message_id: int) -> bool:
     m = await __get_message__(message_id)
-    c = await __get_info__(m["chat_id"])
-    if m["author_id"] != current_user or c["non_removable_messages"]:
+    c = await __get_info__(m["chat_attached_id"])
+    if m["author_id"] != current_user:
+        # or c["non_removable_messages"]
         raise PermissionDenied()
     await config.db.execute("DELETE FROM messages WHERE id=$1", message_id)
     return True
@@ -458,7 +463,7 @@ async def delete_message(current_user: str, message_id: str) -> bool:
 @db_required
 async def get_chats_for_user(user_id: str) -> List[str]:
     chat_list = await config.db.fetch(
-        "SELECT chat_id FROM chat_memberships WHERE user_id=$1", user_id
+        "SELECT chat_id FROM chat_participants WHERE participant_id=$1", user_id
     )
     for idx, item in enumerate(chat_list):
         chat_list[idx] = item["chat_id"]
@@ -466,7 +471,7 @@ async def get_chats_for_user(user_id: str) -> List[str]:
 
 
 @db_required
-async def get_personal_chat(user1: str, user2: str) -> Optional[str]:
+async def get_personal_chat(user1: int, user2: int) -> Optional[str]:
     chat_list = await get_chats_for_user(user1)
     for chat_id in chat_list:
         chat = await __get_info__(chat_id)
@@ -477,15 +482,31 @@ async def get_personal_chat(user1: str, user2: str) -> Optional[str]:
 
 @db_required
 async def get_messages_with_tag(
-    current_user: str, chat_id: str, tag: str
+        current_user: int, chat_id: int, tag: str
 ) -> List[Dict[str, Any]]:
     if not await has_user(current_user, chat_id):
         raise PermissionDenied()
-    message_list = await config.db.fetch(
-        "SELECT messages.id AS id FROM message_tags JOIN messages ON messages.id=message_id WHERE messages.chat_id=$1 AND tag=$2",
-        chat_id,
-        tag,
-    )
-    for idx, item in enumerate(message_list):
-        message_list[idx] = await __get_message__(item["id"], True)
-    return message_list
+    if message_list := await config.db.fetch(
+            "select * from messages where chat_attached_id = $1 and $2 = any(tag_list) ",
+            chat_id,
+            tag,
+    ):
+        # message_list = Dict[message_list]
+        logging.info(type(message_list))
+        return message_list
+    raise ObjectNotFound()
+
+
+@db_required
+async def extract_tokens(current_user: int, users: List[int]):
+    token_list = []
+    for user in users:
+        if user != current_user:
+            if token := await config.db.fetchrow("select tokens from (select unnest(devices_token_list) as tokens from "
+                                                 "users_authentication where id = $1) as rows;",
+                                                 user):
+                logging.info(token["tokens"])
+                token_list.append(token["tokens"])
+    if token_list is not None:
+        return token_list
+    raise ObjectNotFound()
