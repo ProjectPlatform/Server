@@ -24,3 +24,6 @@ click
 multidict
 python-dotenv
 pytest
+emails
+websockets
+firebase-admin
