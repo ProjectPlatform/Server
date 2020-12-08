@@ -80,7 +80,7 @@ async def __add_user__(chat_id: int, user_to_add: int, is_admin: bool = False) -
 async def add_user(current_user: int, chat_id: int, user_to_add: int) -> bool:
     # TODO wtf?
     if await has_user(current_user, chat_id):
-        c = await __get_info__(chat_id)
+        # c = await __get_info__(chat_id)
         # if "is_personal" not in c["properties_list"] and (
         #         "is_user_expandable" in c["properties_list"] or await is_user_admin(current_user, chat_id)
         # ):
@@ -335,6 +335,7 @@ async def get_message_range(
             chat_id,
             limit,
         )
+        # message_list["sent_time"] = datetime.strftime("%Y-%m-%d %H:%M:%S.%f %z")
         # elif not lower_message:
         #     message_list = await config.db.fetch(
         #         "SELECT * FROM messages WHERE chat_attached_id=$1 AND sent_time <= $2 ORDER BY sent_time DESC LIMIT $3",
@@ -481,6 +482,14 @@ async def get_personal_chat(user1: int, user2: int) -> Optional[str]:
 
 
 @db_required
+async def update_last_message_id(chat_id: int, message_id: int):
+    await config.db.execute(f'UPDATE chats SET last_message_id = $1 WHERE id = $2;',
+                            message_id,
+                            chat_id)
+    return True
+
+
+@db_required
 async def get_messages_with_tag(
         current_user: int, chat_id: int, tag: str
 ) -> List[Dict[str, Any]]:
@@ -502,11 +511,13 @@ async def extract_tokens(current_user: int, users: List[int]):
     token_list = []
     for user in users:
         if user != current_user:
-            if token := await config.db.fetchrow("select tokens from (select unnest(devices_token_list) as tokens from "
-                                                 "users_authentication where id = $1) as rows;",
-                                                 user):
+            logger.info(user)
+            if token := await config.db.fetchrow(
+                    "select devices_token_list as tokens from users_authentication where id = 1324 limit 1;",
+                    ):
+                logging.info(token)
                 logging.info(token["tokens"])
-                token_list.append(token["tokens"])
+                token_list.extend(token["tokens"])
     if token_list is not None:
         return token_list
     raise ObjectNotFound()

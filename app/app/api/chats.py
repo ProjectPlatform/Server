@@ -19,7 +19,7 @@ from app.app.src.schemas.chat import ChatCreate
 from app.app.backend.chat import get_info, add_user, remove_user, make_user_admin, create, create_personal, \
     set_non_admin, set_user_expandable, set_non_removable_messages, set_non_modifiable_messages, \
     set_auto_remove_messages, set_digest_messages, get_message, get_message_range, send_message, edit_message, \
-    delete_message, get_chats_for_user, get_messages_with_tag, create_upload_file, extract_tokens
+    delete_message, get_chats_for_user, get_messages_with_tag, create_upload_file, extract_tokens, update_last_message_id
 from app.app.src.security import decode_token, oauth2_scheme
 from app.app.utils import manager
 
@@ -80,9 +80,12 @@ async def req_add_user(chat_id: int, user_id: Optional[int] = None, user_nick: O
         user_to_add_id = user_to_add_id["id"]
 
         result = await add_user(current_user=cur_user_id, chat_id=chat_id, user_to_add=user_to_add_id)
-
+        if not result:
+            raise ObjectNotFound()
         # result = await add_user(**info.dict(), user_to_add=user_to_add)
         return {'result': result}
+    except ObjectNotFound:
+        raise HTTPException(status_code=404, detail="Page not found")
     except PermissionDenied:
         raise HTTPException(status_code=403, detail="Permission denied")
 
@@ -281,6 +284,7 @@ async def req_get_message_range(chat_id: int, limit: int = 50, token: str = Depe
     try:
         user_id = token["id"]
         messages = await get_message_range(current_user=user_id, chat_id=chat_id, limit=limit)
+        logger.info(messages)
         messages = jsonable_encoder(messages)
         return JSONResponse(content=messages)
     except PermissionDenied:
@@ -325,10 +329,11 @@ async def req_send_message(chat_id: int, body: str = Body(...),
         message = await send_message(current_user=user_id, chat_id=chat_id, body=body, attachments=attachments,
                                      tags=tags)
 
-        chat_users = await get_info(current_user=user_id, chat_id=chat_id)
-        chat_users = chat_users["users"]
+        await update_last_message_id(chat_id=chat_id, message_id=message["id"])
 
-        token_list = await extract_tokens(current_user=user_id, users=chat_users)
+        chat_users = await get_info(current_user=user_id, chat_id=chat_id)
+
+        token_list = await extract_tokens(current_user=user_id, users=chat_users["users"])
 
         # token_list = token_list["devices_token_list"]
         logger.info(token_list)
