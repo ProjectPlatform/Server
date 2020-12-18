@@ -1,4 +1,5 @@
 # import datetime
+import json
 from datetime import datetime
 import logging
 import shutil
@@ -6,14 +7,16 @@ import uuid
 from typing import Optional, Any, Dict, List, Tuple
 
 from fastapi import UploadFile
+from firebase_admin import messaging
 
 from app.app.backend import config
 from app.app.backend.utils import db_required, insert_with_unique_id
 from app.app.backend.exceptions import PermissionDenied, ObjectNotFound, InvalidRange
 from app.app.backend.user import get_user_info
+from app.app.src.websockets import connections
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 @db_required
@@ -46,7 +49,7 @@ async def __get_info__(chat_id: int) -> Dict[str, Any]:
 
 @db_required
 async def get_info(current_user: int, chat_id: int) -> Dict[str, Any]:
-    if not await has_user(current_user, chat_id):
+    if not await has_user(current_user, chat_id) and current_user is not 1:
         raise PermissionDenied()
     res = await __get_info__(chat_id)
     res["admins"] = []
@@ -78,7 +81,6 @@ async def __add_user__(chat_id: int, user_to_add: int, is_admin: bool = False) -
 
 @db_required
 async def add_user(current_user: int, chat_id: int, user_to_add: int) -> bool:
-    # TODO wtf?
     if await has_user(current_user, chat_id):
         # c = await __get_info__(chat_id)
         # if "is_personal" not in c["properties_list"] and (
@@ -93,22 +95,16 @@ async def add_user(current_user: int, chat_id: int, user_to_add: int) -> bool:
 
 @db_required
 async def __remove_user__(chat_id: int, user_to_remove: int) -> bool:
-    # try:
-    # await config.db.execute(
-    #     "DELETE FROM chat_participants WHERE chat_id=$1 AND participant_id=$2",
-    #     chat_id,
-    #     user_to_remove,
-    #
     await config.db.execute(
         "delete from chat_participants Where chat_id = $1 and participant_id = $2;",
         chat_id,
         user_to_remove,
     )
-    participants123 = dict(
+    participants = dict(
         await config.db.fetchrow("Select exists(select '*' from chat_participants Where chat_id = $1);",
                                  chat_id))
-    logging.info(participants123)
-    if not participants123["exists"]:
+    logging.info(participants)
+    if not participants["exists"]:
         await config.db.execute(
             "DELETE FROM chats WHERE id = $1;",
             chat_id,
@@ -357,23 +353,19 @@ async def get_message_range(
     raise PermissionDenied()
 
 
-ATTACHMENT_IMAGE = 0
-ATTACHMENT_DOCUMENT = 1
-
-
 @db_required
-async def send_message(
+async def __send_message__(
         current_user: int,
         chat_id: int,
         body: str,
         attachments: Optional[List[int]] = None,
         tags: Optional[List[str]] = None,
-) -> Dict[str, Any]:
+):
     if attachments:
         has_attached_file = True
     else:
         has_attached_file = False
-    if not await has_user(current_user, chat_id):
+    if not await has_user(current_user, chat_id) and current_user is not 1:
         raise PermissionDenied()
     async with config.db.acquire() as con:
         async with con.transaction():
@@ -387,18 +379,82 @@ async def send_message(
                     await insert_with_unique_id(
                         "message_attachments", ("message_id", "attached_doc"), (res, a)
                     )
-            # if tags:
-            #     for t in tags:
-            #         await insert_with_unique_id(
-            #             "message_tags", ("message_id", "tag"), (res, t)
-            #         )
     return await __get_message__(res, True)
+
+
+@db_required
+async def __send_message_desktop__(
+        current_user: int,
+        chat_info: Dict[str, Any],
+        message: Dict[str, Any],
+):
+    for chat_user in chat_info["users"]:
+        ws = connections.active_connections.get(chat_user)
+        log.info(ws)
+        if ws is not None and ws is not current_user:
+            log.info("Websocket send message")
+            await ws.send_bytes(json.dumps({**message}, indent=4, sort_keys=True, default=str))
+
+
+@db_required
+async def __send_message_firebase__(
+        current_user: int,
+        chat_info: Dict[str, Any],
+        message: Dict[str, Any],
+        user_nick: str,
+):
+    token_list = await extract_tokens(current_user=current_user, users=chat_info["users"])
+    # log.info(token_list)
+    message_firebase = messaging.MulticastMessage(
+        notification=messaging.Notification(
+            title=chat_info["name"],
+            body=user_nick + ": " + message["body"],
+        ),
+        data={'data': json.dumps({**message}, indent=4, sort_keys=True, default=str)},
+        tokens=token_list
+    )
+    response = messaging.send_multicast(message_firebase)
+    print('Successfully sent message:', response)
+
+
+@db_required
+async def send_message(
+        current_user: int,
+        chat_id: int,
+        body: str,
+        attachments: Optional[List[int]] = None,
+        tags: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    user_info = await get_user_info(user_id=current_user)
+
+    message = await __send_message__(current_user=current_user, chat_id=chat_id, body=body, attachments=attachments,
+                                     tags=tags)
+    #log.info(message)
+    message.update({"message_type": "message"})
+
+    await update_last_message_id(chat_id=chat_id, message_id=message["id"])
+    chat_info = await get_info(current_user=current_user, chat_id=chat_id)
+
+    # Send message to desktop client
+    await __send_message_desktop__(current_user=current_user, chat_info=chat_info, message=message)
+
+    # Send message to android client
+    await __send_message_firebase__(current_user=current_user, chat_info=chat_info, message=message,
+                                    user_nick=user_info["nick"])
+    return message
+
+
+@db_required
+async def get_attachment(file_id: int):
+    file_path = await config.db.fetchrow(f'select path_original from sources where id = $1 limit 1;',
+                                         file_id)
+    return file_path["path_original"]
 
 
 @db_required
 async def create_upload_file(uploaded_file: UploadFile, current_user: int, description: str, is_showable: bool) -> int:
     file_id = uuid.uuid4()
-    file_location = f"app/app/attachments/{file_id}"
+    file_location = f"attachments/{file_id}"
     with open(file_location, "wb+") as file_object:
         shutil.copyfileobj(uploaded_file.file, file_object)
     attachment_id = await insert_with_unique_id("sources", ("is_showable", "path_original", "path_thumbnail", "owner",
@@ -406,6 +462,10 @@ async def create_upload_file(uploaded_file: UploadFile, current_user: int, descr
                                                 (is_showable, file_location, file_location,
                                                  current_user, description, "meta"))
     return attachment_id
+
+
+# ATTACHMENT_IMAGE = 0
+# ATTACHMENT_DOCUMENT = 1
 
 
 @db_required
@@ -433,15 +493,15 @@ async def edit_message(
             # await config.db.execute(
             #     "DELETE FROM message_tags WHERE message_id=$1", message_id
             # )
-            if attachments:
-                for a in attachments:
-                    if a[0] == ATTACHMENT_IMAGE:
-                        col = "image_id"
-                    elif a[0] == ATTACHMENT_DOCUMENT:
-                        col = "document_id"
-                    await insert_with_unique_id(
-                        "message_attachments", ("message_id", col), (message_id, a[1])
-                    )
+            # if attachments:
+            #     for a in attachments:
+            #         if a[0] == ATTACHMENT_IMAGE:
+            #             col = "image_id"
+            #         elif a[0] == ATTACHMENT_DOCUMENT:
+            #             col = "document_id"
+            #         await insert_with_unique_id(
+            #             "message_attachments", ("message_id", col), (message_id, a[1])
+            #         )
             # if tags:
             #     for t in tags:
             #         await insert_with_unique_id(
@@ -500,7 +560,6 @@ async def get_messages_with_tag(
             chat_id,
             tag,
     ):
-        # message_list = Dict[message_list]
         logging.info(type(message_list))
         return message_list
     raise ObjectNotFound()
@@ -511,12 +570,13 @@ async def extract_tokens(current_user: int, users: List[int]):
     token_list = []
     for user in users:
         if user != current_user:
-            logger.info(user)
+            #log.info(user)
             if token := await config.db.fetchrow(
-                    "select devices_token_list as tokens from users_authentication where id = 1324 limit 1;",
-                    ):
-                logging.info(token)
-                logging.info(token["tokens"])
+                    "select devices_token_list as tokens from users_authentication where id = $1 limit 1;",
+                    user
+            ):
+                # logging.info(token)
+                # logging.info(token["tokens"])
                 token_list.extend(token["tokens"])
     if token_list is not None:
         return token_list
