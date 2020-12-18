@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime, timedelta
 from typing import Optional
@@ -11,14 +12,17 @@ from dotenv import load_dotenv
 from starlette import status
 
 from app.app.backend import get_user_info, ObjectNotFound
+from app.app.inital_data import config
 
-load_dotenv()
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
+log.info(config.sections())
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-ALGORITHM = os.environ.get("ALGORITHM")
+ALGORITHM = config['security']['ALGORITHM']
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login",
-                                     scopes={"user": "Ordinary user", "developer": "application developer"})
-SECRET_KEY = os.environ.get("SECRET_KEY")
+                                     scopes={"user": "Ordinary user", "developer": "Application developer"})
+SECRET_KEY = config['security']['SECRET_KEY']
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 
 
@@ -26,9 +30,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 #     return pwd_context.hash(password)
 
 
-async def decode_token(security_scopes: SecurityScopes, token: str = Depends(oauth2_scheme)):
+#async def decode_token(security_scopes: SecurityScopes, token: str = Depends(oauth2_scheme)):
+async def decode_token(token: str = Depends(oauth2_scheme)):
     # if security_scopes.scopes
-
+    log.info(token)
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
