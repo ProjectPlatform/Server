@@ -10,7 +10,7 @@ from fastapi.encoders import jsonable_encoder
 from firebase_admin import messaging, auth
 import firebase_admin
 from pydantic import EmailStr
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, FileResponse
 
 from app.app.backend.user import get_user_info
 from app.app.backend import ObjectNotFound
@@ -19,12 +19,13 @@ from app.app.src.schemas.chat import ChatCreate
 from app.app.backend.chat import get_info, add_user, remove_user, make_user_admin, create, create_personal, \
     set_non_admin, set_user_expandable, set_non_removable_messages, set_non_modifiable_messages, \
     set_auto_remove_messages, set_digest_messages, get_message, get_message_range, send_message, edit_message, \
-    delete_message, get_chats_for_user, get_messages_with_tag, create_upload_file, extract_tokens, update_last_message_id
+    delete_message, get_chats_for_user, get_messages_with_tag, create_upload_file, extract_tokens, \
+    update_last_message_id, get_attachment
 from app.app.src.security import decode_token, oauth2_scheme
-from app.app.utils import manager
+from app.app.src.websockets import connections
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -51,6 +52,7 @@ async def req_get_info(chat_id: int, token: str = Depends(decode_token)) -> Dict
     * Status code **404**
     """
     try:
+        # log.info(token)
         user_id = token["id"]
         received_info = await get_info(current_user=user_id, chat_id=chat_id)
         logging.info(received_info)
@@ -73,21 +75,25 @@ async def req_add_user(chat_id: int, user_id: Optional[int] = None, user_nick: O
     **Exceptions:**
     * Status code **403**
     """
-    try:
-        cur_user_id = token["id"]
+    #try:
+    cur_user_id = token["id"]
+    log.info(cur_user_id)
+    user_to_add = await get_user_info(user_id=user_id, user_nick=user_nick, user_email=user_email)
 
-        user_to_add_id = await get_user_info(user_id=user_id, user_nick=user_nick, user_email=user_email)
-        user_to_add_id = user_to_add_id["id"]
+    result = await add_user(current_user=cur_user_id, chat_id=chat_id, user_to_add=user_to_add["id"])
+    if not result:
+        raise ObjectNotFound()
+    # result = await add_user(**info.dict(), user_to_add=user_to_add)
+    # return {'result': result}
 
-        result = await add_user(current_user=cur_user_id, chat_id=chat_id, user_to_add=user_to_add_id)
-        if not result:
-            raise ObjectNotFound()
-        # result = await add_user(**info.dict(), user_to_add=user_to_add)
-        return {'result': result}
-    except ObjectNotFound:
-        raise HTTPException(status_code=404, detail="Page not found")
-    except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
+    message = await send_message(current_user=1, chat_id=chat_id,
+                                 body=user_to_add["nick"] + " has joined the chat.", tags=[])
+    return message
+
+    # except PermissionDenied:
+    #     raise HTTPException(status_code=403, detail="Permission denied")
+    # except ObjectNotFound:
+    #     raise HTTPException(status_code=404, detail="Page not found")
 
 
 @router.delete("/remove_user")
@@ -106,11 +112,15 @@ async def req_remove_user(chat_id: int, user_id: Optional[int] = None, user_nick
     try:
         cur_user_id = token["id"]
 
-        user_to_remove_id = await get_user_info(user_id=user_id, user_nick=user_nick, user_email=user_email)
-        user_to_remove_id = user_to_remove_id["id"]
+        user_to_remove = await get_user_info(user_id=user_id, user_nick=user_nick, user_email=user_email)
 
-        result = await remove_user(current_user=cur_user_id, chat_id=chat_id, user_to_remove=user_to_remove_id)
-        return {'result': result}
+        result = await remove_user(current_user=cur_user_id, chat_id=chat_id, user_to_remove=user_to_remove["id"])
+        if not result:
+            raise ObjectNotFound()
+
+        message = await send_message(current_user=1, chat_id=chat_id,
+                                     body=user_to_remove["nick"] + " has left the chat.", tags=[])
+        return message
     except PermissionDenied:
         raise HTTPException(status_code=403, detail="Permission denied")
     except ObjectNotFound:
@@ -284,7 +294,7 @@ async def req_get_message_range(chat_id: int, limit: int = 50, token: str = Depe
     try:
         user_id = token["id"]
         messages = await get_message_range(current_user=user_id, chat_id=chat_id, limit=limit)
-        logger.info(messages)
+        #log.info(messages)
         messages = jsonable_encoder(messages)
         return JSONResponse(content=messages)
     except PermissionDenied:
@@ -293,8 +303,15 @@ async def req_get_message_range(chat_id: int, limit: int = 50, token: str = Depe
         raise HTTPException(status_code=404, detail="Page not found")
 
 
+@router.get("/get_attachments/{file_id}")
+async def get_attachments(file_id: int):
+    path = await get_attachment(file_id=file_id)
+    return FileResponse(path=path, media_type='application/octet-stream', filename=path[12:])
+
+
 @router.post("/upload_attachments")
-async def upload_attachments(is_showable: bool, description: Optional[str] = None, files: List[UploadFile] = File(...),
+async def upload_attachments(is_showable: bool = True, description: Optional[str] = None,
+                             files: List[UploadFile] = File(...),
                              token: str = Depends(decode_token)):
     """
     Upload files to the app's servers
@@ -316,48 +333,6 @@ async def upload_attachments(is_showable: bool, description: Optional[str] = Non
         raise HTTPException(status_code=403, detail="Permission denied")
 
 
-@router.post('/send_message_firebase')
-async def req_send_message(chat_id: int, body: str = Body(...),
-                           attachments: Optional[List[int]] = [],
-                           tags: Optional[List[str]] = None, token: str = Depends(decode_token), ) -> Any:
-    try:
-        user_id = token["id"]
-
-        user_nick = await get_user_info(user_id=user_id)
-        user_nick = user_nick["nick"]
-
-        message = await send_message(current_user=user_id, chat_id=chat_id, body=body, attachments=attachments,
-                                     tags=tags)
-
-        await update_last_message_id(chat_id=chat_id, message_id=message["id"])
-
-        chat_users = await get_info(current_user=user_id, chat_id=chat_id)
-
-        token_list = await extract_tokens(current_user=user_id, users=chat_users["users"])
-
-        # token_list = token_list["devices_token_list"]
-        logger.info(token_list)
-        # logger.info(message["body"])
-
-        logger.info({**message})
-        logger.info(type(message))
-        message_firebase = messaging.MulticastMessage(
-            notification=messaging.Notification(
-                title=user_nick,
-                body=message["body"],
-            ),
-            data={'data': json.dumps({**message}, indent=4, sort_keys=True, default=str)},
-            # json.dumps(message,  indent=4, sort_keys=True, default=str),
-            tokens=token_list
-        )
-
-        response = messaging.send_multicast(message_firebase)
-        print('Successfully sent message:', response)
-        return {'result': True}
-    except PermissionDenied:
-        raise HTTPException(status_code=403, detail="Permission denied")
-
-
 @router.post('/send_message')
 async def req_send_message(chat_id: int, body: str = Body(...),
                            attachments: Optional[List[int]] = [],
@@ -371,18 +346,51 @@ async def req_send_message(chat_id: int, body: str = Body(...),
     * **chat_attached_id** – the id of the chat to which this message belongs
     * **author_id** – the id of the user who sent the message
     * **sent_time** – the time when the message was sent. Represented by a datetime object
+    * **tag_list** – the list of tags of this message
     * **body** – the body of the message
     * **has_attached_file** - whether the message has attached file
-    * **attachments** – a list containing the ids of this message's attachments
-    * **tags** – the list of tags of this message
+    * **message_type** - type of message (message or notification or something else)
 
     **Exceptions**
     * Status code **403**
     """
     try:
         user_id = token["id"]
+
+        log.info("message_test:" + body)
         message = await send_message(current_user=user_id, chat_id=chat_id, body=body, attachments=attachments,
                                      tags=tags)
+        # await update_last_message_id(chat_id=chat_id, message_id=message["id"])
+        # chat_info = await get_info(current_user=user_id, chat_id=chat_id)
+        #
+        # token_list = await extract_tokens(current_user=user_id, users=chat_info["users"])
+        #
+        # message.update({"message_type": "message"})
+        # # token_list = token_list["devices_token_list"]
+        # log.info(token_list)
+        # # logger.info(message["body"])
+        #
+        # # Send message on android
+        # message_firebase = messaging.MulticastMessage(
+        #     notification=messaging.Notification(
+        #         title=chat_info["name"],
+        #         body=user_nick + ": " + message["body"],
+        #     ),
+        #     data={'data': json.dumps({**message}, indent=4, sort_keys=True, default=str)},
+        #     # json.dumps(message,  indent=4, sort_keys=True, default=str),
+        #     tokens=token_list
+        # )
+        # response = messaging.send_multicast(message_firebase)
+        # print('Successfully sent message:', response)
+        #
+        # # Send message to PC client
+        # for chat_user in chat_info["users"]:
+        #     ws = connections.active_connections.get(chat_user)
+        #     log.info(ws)
+        #     if ws is not None and ws is not user_id:
+        #         log.info("Websocket send message")
+        #         await ws.send_bytes(json.dumps({**message}, indent=4, sort_keys=True, default=str))
+
         return message
     except PermissionDenied:
         raise HTTPException(status_code=403, detail="Permission denied")
