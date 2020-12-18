@@ -3,7 +3,6 @@ from app.app.backend.exceptions import NotInitialised
 from asyncpg.exceptions import UniqueViolationError
 from functools import update_wrapper
 import random
-import string
 from typing import Tuple, Any
 
 
@@ -28,9 +27,6 @@ async def insert_with_unique_id(
         uid = generate_id()
         try:
             await config.db.execute(
-                # TODO replace sql request
-                # "INSERT INTO users_authentication (ID, NICK, EMAIL, NAME, PASSWD_HASH, PASSWD_SALT) VALUES (DEFAULT, 'test', 'test@test', 'test', 'test', '_PASSWORD_SALT');"
-
                 f'INSERT INTO {table} (id, {", ".join(columns)}) VALUES ($1, {", ".join([f"${i}" for i in range(2, len(values) + 2)])});',
                 uid,
                 *values,
