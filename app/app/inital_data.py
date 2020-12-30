@@ -3,16 +3,20 @@ import asyncio
 import os
 
 import firebase_admin
+from firebase_admin import credentials
 
-from app.app.settings import Settings
 from app.app.backend import init as init_db
 from configparser import ConfigParser
 
-logging.basicConfig(level=logging.INFO)
-log = logging.getLogger(__name__)
+from app.app.settings import Settings
 
 config = ConfigParser()
 config.read(os.path.join(os.path.dirname(__file__), 'config.ini'))
+
+from app.app.src import websockets
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 
 async def init() -> None:
@@ -26,27 +30,15 @@ async def init() -> None:
 
 
 async def main() -> None:
-    default_app = firebase_admin.initialize_app()
-    # log.info(os.path.dirname(__file__))
+    cred = credentials.Certificate(
+        (os.path.join(os.path.dirname(__file__), 'server-7f82a-firebase-adminsdk-leob0-215c5fb60a.json')))
+    # cred = credentials.Certificate((os.path.join(os.path.dirname(__file__), 'server-7f82a-firebase-adminsdk-leob0-215c5fb60a.json'))"./server-7f82a-firebase-adminsdk-leob0-215c5fb60a.json")
+    firebase_admin.initialize_app(cred)
     log.info("Creating initial data")
     await init()
     log.info("Initial data created")
+    #await websockets.bug()
 
 
 loop = asyncio.get_event_loop()
 loop.create_task(main())
-
-# try:
-#     loop = asyncio.get_event_loop()
-# except RuntimeError:
-#     loop = None
-#
-# if loop and loop.is_running():
-#     print('Async event loop already running')
-#     tsk = loop.create_task(main())
-#     # tsk.add_done_callback(                                          # optional
-#     #     lambda t: print(f'Task done: '                              # optional
-#     #                     f'{t.result()=} << return val of main()'))  # optional (using py38)
-# else:
-#     print('Starting new event loop')
-#     asyncio.run(main())
