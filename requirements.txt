@@ -6,6 +6,7 @@ passlib
 pydantic
 PyJWT
 tornado
+Jinja2
 python-jose
 python-multipart
 asyncio
