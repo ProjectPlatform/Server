@@ -1,122 +1,121 @@
-BEGIN TRANSACTION;
-DROP TABLE IF EXISTS users CASCADE;
-DROP TABLE IF EXISTS education_records CASCADE;
-DROP TABLE IF EXISTS career_records CASCADE;
-DROP TABLE IF EXISTS additional_experience_records CASCADE;
-DROP TABLE IF EXISTS tags CASCADE;
-DROP TABLE IF EXISTS user_tags CASCADE;
-DROP TABLE IF EXISTS connections CASCADE;
-DROP TABLE IF EXISTS images CASCADE;
-DROP TYPE IF EXISTS education_level;
-CREATE TYPE education_level AS enum (
-    'enrollee',
-    'undergraduate',
-    'graduate',
-    'postgraduate'
-);
-CREATE TABLE images (
-    id varchar(12) PRIMARY KEY,
-    image_path varchar(256),
-    thumbnail_path varchar(256)
-);
-CREATE TABLE documents (
-    id varchar(12) PRIMARY KEY,
-    name varchar(256) NOT NULL,
-    path varchar(256) NOT NULL
-);
-CREATE TABLE users (
-    id varchar(12) PRIMARY KEY,
-    nick varchar(64) UNIQUE NOT NULL,
-    password varchar(128) NOT NULL,
-    name varchar(128) NOT NULL,
-    email varchar(128) UNIQUE NOT NULL,
-    avatar_id varchar(12) REFERENCES images ON DELETE SET NULL,
-    pspicture jsonb
-);
-CREATE TABLE education_records (
-    id varchar(12) PRIMARY KEY,
-    user_id varchar(12) REFERENCES users ON DELETE CASCADE NOT NULL,
-    level education_level NOT NULL,
-    institution varchar(256) NOT NULL,
-    from_year integer NOT NULL CHECK (from_year > 0),
-    to_year integer CHECK (to_year IS NULL OR to_year > 0),
-    CHECK (to_year IS NULL OR to_year >= from_year)
-);
-CREATE TABLE career_records (
-    id varchar(12) PRIMARY KEY,
-    user_id varchar(12) REFERENCES users ON DELETE CASCADE NOT NULL,
-    company varchar(256) NOT NULL,
-    position varchar(256) NOT NULL,
-    from_year integer NOT NULL CHECK (from_year > 0),
-    to_year integer CHECK (to_year IS NULL OR to_year > 0),
-    CHECK (to_year IS NULL OR to_year >= from_year)
-);
-CREATE TABLE additional_experience_records (
-    id varchar(12) PRIMARY KEY,
-    user_id varchar(12) REFERENCES users ON DELETE CASCADE NOT NULL,
-    description text NOT NULL
-);
-CREATE TABLE tags (
-    id varchar(12) PRIMARY KEY,
-    name varchar(64) NOT NULL,
-    hierarchy ltree NOT NULL
-);
-CREATE TABLE user_tags (
-    id varchar(12) PRIMARY KEY,
-    user_id varchar(12) REFERENCES users ON DELETE CASCADE NOT NULL,
-    tag_id varchar(12) REFERENCES tags ON DELETE CASCADE NOT NULL
-);
-CREATE TABLE connections (
-    id varchar(12) PRIMARY KEY,
-    from_user_id varchar(12) REFERENCES users ON DELETE CASCADE NOT NULL,
-    to_user_id varchar(12) REFERENCES users ON DELETE CASCADE NOT NULL,
-    groups integer
-);
-CREATE TABLE chats (
-    id varchar(12) PRIMARY KEY,
-    name varchar(64) NOT NULL,
-    avatar_id varchar(12) REFERENCES images,
-    colour integer,
-    is_encrypted boolean NOT NULL,
-    is_personal boolean NOT NULL,
-    is_user_expandable boolean NOT NULL,
-    is_user_expandable_modified_by varchar(12) REFERENCES users ON DELETE SET NULL,
-    is_non_admin boolean NOT NULL,
-    is_non_admin_modified_by varchar(12) REFERENCES users ON DELETE SET NULL,
-    non_removable_messages boolean NOT NULL,
-    non_removable_messages_modified_by varchar(12) REFERENCES users ON DELETE SET NULL,
-    non_modifiable_messages boolean NOT NULL,
-    non_modifiable_messages_modified_by varchar(12) REFERENCES users ON DELETE SET NULL,
-    auto_remove_messages boolean NOT NULL,
-    auto_remove_messages_modified_by varchar(12) REFERENCES users ON DELETE SET NULL,
-    auto_remove_period integer CHECK (auto_remove_period IS NULL OR auto_remove_period > 0),
-    digest_messages boolean NOT NULL,
-    digest_messages_modified_by varchar(12) REFERENCES users ON DELETE SET NULL
-);
-CREATE TABLE chat_memberships (
-    id varchar(12) PRIMARY KEY,
-    user_id varchar(12) REFERENCES users ON DELETE CASCADE NOT NULL,
-    chat_id varchar(12) REFERENCES chats ON DELETE CASCADE NOT NULL,
-    is_admin boolean NOT NULL
-);
-CREATE TABLE messages (
-    id varchar(12) PRIMARY KEY,
-    chat_id varchar(12) REFERENCES chats ON DELETE CASCADE NOT NULL,
-    time timestamp NOT NULL,
-    author_id varchar(12) REFERENCES users ON DELETE SET NULL,
-    body text NOT NULL
-);
-CREATE TABLE message_tags (
-    id varchar(12),
-    message_id varchar(12) REFERENCES messages ON DELETE CASCADE NOT NULL,
-    tag varchar(64) NOT NULL
-);
-CREATE TABLE message_attachments (
-    id varchar(12) PRIMARY KEY,
-    message_id varchar(12) REFERENCES messages ON DELETE CASCADE,
-    document_id varchar(12) REFERENCES documents ON DELETE CASCADE,
-    image_id varchar(12) REFERENCES images ON DELETE CASCADE,
-    CHECK((document_id IS NULL AND image_id IS NOT NULL) OR (document_id IS NOT NULL AND image_id IS NULL))
-);
-COMMIT;
+------------------------------------------------------------------------------------------------------------------------------------------------
+drop table if exists message_attachments;
+drop table if exists messages;
+drop table if exists chat_properties;
+drop table if exists chat_participants;
+drop table if exists chats;
+drop table if exists sources;
+drop table if exists registration_verification_codes;
+drop table if exists users_authentication;
+------------------------------------------------------------------------------------------------------------------------------------------------
+create table users_authentication(
+	id int8 default ('x' || right(md5(to_char(current_timestamp, 'dd-mm-yyyy hh:mi:ss:us')), 8))::bit(63)::int8,
+	nick varchar(20),
+	name varchar,
+	email varchar,
+	passwd_hash varchar,
+	devices_token_list varchar[] default '{}'::varchar[],
+    was_confirmed bool default false,
 
+	primary key(id),
+	constraint id_positive check( id > 0 ),
+	constraint nick_uniq unique(nick),
+	constraint email_uniq unique(email),
+	constraint nick_spelling check (nick similar to '[a-za-z0-9@\_.]*'),
+	constraint name_spelling check (name similar to '%[a-za-zа-яа-я ]%'),
+	constraint filled check ( id is not null and name is not null and passwd_hash is not null and email is not null)
+);
+create index user_id
+    on users_authentication (id);
+------------------------------------------------------------------------------------------------------------------------------------------------
+create table registration_verification_codes(
+  id int8 references users_authentication(id),
+  mailcode int4 not null,
+  validtime timestamp default current_timestamp + interval '2 hours',
+  attemptsmade int2 default 0
+);
+------------------------------------------------------------------------------------------------------------------------------------------------
+create table sources(
+	inner_uri varchar,
+    is_public boolean default false,
+	is_showable boolean default false,
+	path_original varchar,
+	path_thumbnail varchar default null,
+	owner int8 default 404 references users_authentication on delete set default ,
+	description varchar default null,
+	meta varchar default null,
+
+	primary key (inner_uri),
+	constraint uri_not_null check(inner_uri is not null),
+	constraint _unique_originalpath unique(path_original),
+	constraint owner_exist check(owner is not null),
+	constraint path_existence check(path_original is not null)
+);
+create unique index source_thumbnail
+	on sources (path_thumbnail)
+	where path_thumbnail is not null;
+------------------------------------------------------------------------------------------------------------------------------------------------
+create table chats(
+	id int8,
+	name varchar,
+	creator int8 default 404 references users_authentication on delete set default,
+	avatar varchar default null references sources on delete restrict,
+	color_rgba int4 default 0,
+	encoded boolean default false,
+
+	primary key (id),
+	constraint name_is_not_null check(name is not null),
+	constraint encoded_is_not_null check(encoded is not null)
+);
+create index chats_id_ind
+    on chats (id);
+------------------------------------------------------------------------------------------------------------------------------------------------
+create table chat_properties(
+    id int8 references chats(id) on delete cascade not null,
+    property varchar not null,
+    user_agreed int8 references users_authentication on delete cascade not null,
+
+    primary key (id, property, user_agreed)
+);
+create index chats_properties_ind
+    on chat_properties (id, property);
+------------------------------------------------------------------------------------------------------------------------------------------------
+create table chat_participants(
+    participant_id int8 references users_authentication on delete cascade,
+    chat_id int8 references chats on delete cascade,
+	is_admin boolean default false,
+
+	constraint participant_id_is_not_null check (participant_id is not null),
+	constraint chat_id_is_not_null check(chat_id is not null),
+	constraint is_admin_is_not_null check(is_admin is not null)
+);
+create index chat_participants_chat_ind
+	on chat_participants(chat_id);
+create index chat_participants_user_ind
+	on chat_participants(participant_id);
+------------------------------------------------------------------------------------------------------------------------------------------------
+create table messages(
+    id int8,
+	chat_attached_id int8 references chats(id) on delete cascade,
+	author_id int8 references users_authentication(id) on delete cascade,
+	sent_time timestamp default current_timestamp::timestamp,
+	tag_list varchar[] default array[]::varchar[],
+	body text default '',
+	has_attached_file boolean default false not null,
+
+	primary key (id),
+	constraint time_unique unique (sent_time),
+	constraint not_empty_message check (id is not null and chat_attached_id is not null and tag_list is not null
+									   and (body is not null and body <> '' or has_attached_file)),
+    constraint author_is_participant check(is_user_chat_participant(author_id, chat_attached_id) or author_id = 1)
+);
+create index chat_ind
+    on messages(chat_attached_id);
+create unique index message_ind
+	on messages(id);
+------------------------------------------------------------------------------------------------------------------------------------------------
+create table message_attachments(
+    chat_attached_id int8,
+    message_attached_id int8,
+	uri varchar references sources(inner_uri) on delete restrict
+);
