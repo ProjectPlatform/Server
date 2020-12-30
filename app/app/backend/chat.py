@@ -1,5 +1,6 @@
 # import datetime
 import json
+import os
 from datetime import datetime
 import logging
 import shutil
@@ -10,7 +11,7 @@ from fastapi import UploadFile
 from firebase_admin import messaging
 
 from app.app.backend import config
-from app.app.backend.utils import db_required, insert_with_unique_id
+from app.app.backend.utils import db_required, insert_with_unique_id, insert_without_unique_id
 from app.app.backend.exceptions import PermissionDenied, ObjectNotFound, InvalidRange
 from app.app.backend.user import get_user_info
 from app.app.src.websockets import connections
@@ -49,7 +50,7 @@ async def __get_info__(chat_id: int) -> Dict[str, Any]:
 
 @db_required
 async def get_info(current_user: int, chat_id: int) -> Dict[str, Any]:
-    if not await has_user(current_user, chat_id) and current_user is not 1:
+    if not await has_user(current_user, chat_id) and current_user != 1:
         raise PermissionDenied()
     res = await __get_info__(chat_id)
     res["admins"] = []
@@ -71,11 +72,10 @@ async def __is_chat_non_admin__(chat_id: int) -> bool:
 @db_required
 async def __add_user__(chat_id: int, user_to_add: int, is_admin: bool = False) -> bool:
     # TODO add except on "chat_participants_participant_id_fkey"
-    await insert_with_unique_id(
-        "CHAT_PARTICIPANTS",
-        ("participant_id", "chat_id", "is_admin"),
-        (user_to_add, chat_id, is_admin),
-    )
+    await insert_without_unique_id("CHAT_PARTICIPANTS",
+                                   ("participant_id", "chat_id", "is_admin"),
+                                   (user_to_add, chat_id, is_admin),
+                                   )
     return True
 
 
@@ -270,7 +270,7 @@ async def set_digest_messages(current_user: str, chat_id: str, value: bool) -> b
 async def __message_add_extra_fields__(m: Dict[str, Any]) -> None:
     m["attachments"] = []
     for record in await config.db.fetch(
-            "SELECT id FROM message_attachments WHERE message_id=$1", m["id"]
+            "SELECT id FROM message_attachments WHERE message_attached_id=$1", m["id"]
     ):
         m["attachments"].append(record["id"])
     m["tags"] = []
@@ -365,7 +365,7 @@ async def __send_message__(
         has_attached_file = True
     else:
         has_attached_file = False
-    if not await has_user(current_user, chat_id) and current_user is not 1:
+    if not await has_user(current_user, chat_id) and current_user != 1:
         raise PermissionDenied()
     async with config.db.acquire() as con:
         async with con.transaction():
@@ -376,8 +376,8 @@ async def __send_message__(
             )
             if attachments:
                 for a in attachments:
-                    await insert_with_unique_id(
-                        "message_attachments", ("message_id", "attached_doc"), (res, a)
+                    await insert_without_unique_id(
+                        "message_attachments", ("chat_attached_id", "message_attached_id", "uri"), (chat_id, res, a)
                     )
     return await __get_message__(res, True)
 
@@ -389,10 +389,12 @@ async def __send_message_desktop__(
         message: Dict[str, Any],
 ):
     for chat_user in chat_info["users"]:
+        # for i in range(1, 100):
         ws = connections.active_connections.get(chat_user)
-        log.info(ws)
+        # ws = connections.active_connections.get(i)
         if ws is not None and ws is not current_user:
-            log.info("Websocket send message")
+            log.info(f'Websocket send message to {ws}')
+            log.info("  body: " + message["body"])
             await ws.send_bytes(json.dumps({**message}, indent=4, sort_keys=True, default=str))
 
 
@@ -414,7 +416,7 @@ async def __send_message_firebase__(
         tokens=token_list
     )
     response = messaging.send_multicast(message_firebase)
-    print('Successfully sent message:', response)
+    # print('Successfully sent message:', response)
 
 
 @db_required
@@ -429,10 +431,8 @@ async def send_message(
 
     message = await __send_message__(current_user=current_user, chat_id=chat_id, body=body, attachments=attachments,
                                      tags=tags)
-    #log.info(message)
     message.update({"message_type": "message"})
 
-    await update_last_message_id(chat_id=chat_id, message_id=message["id"])
     chat_info = await get_info(current_user=current_user, chat_id=chat_id)
 
     # Send message to desktop client
@@ -452,16 +452,18 @@ async def get_attachment(file_id: int):
 
 
 @db_required
-async def create_upload_file(uploaded_file: UploadFile, current_user: int, description: str, is_showable: bool) -> int:
-    file_id = uuid.uuid4()
-    file_location = f"attachments/{file_id}"
+async def create_upload_file(uploaded_file: UploadFile, current_user: int, description: str, is_showable: bool) -> str:
+    filename, file_extension = os.path.splitext(uploaded_file.filename)
+    file_id = str(uuid.uuid4()) + file_extension
+    file_location = os.path.join(os.path.dirname(__file__), f'attachments/{file_id}')
     with open(file_location, "wb+") as file_object:
         shutil.copyfileobj(uploaded_file.file, file_object)
-    attachment_id = await insert_with_unique_id("sources", ("is_showable", "path_original", "path_thumbnail", "owner",
-                                                            "description", "meta"),
-                                                (is_showable, file_location, file_location,
-                                                 current_user, description, "meta"))
-    return attachment_id
+    await insert_without_unique_id("sources",
+                                   ("inner_uri", "is_public", "is_showable", "path_original",
+                                    "path_thumbnail", "owner", "description", "meta"),
+                                   (file_id, True, is_showable, file_location, file_location,
+                                    current_user, description, "meta"))
+    return file_id
 
 
 # ATTACHMENT_IMAGE = 0
@@ -488,7 +490,7 @@ async def edit_message(
                 "UPDATE messages SET body=$1 WHERE id=$2", body, message_id
             )
             await config.db.execute(
-                "DELETE FROM message_attachments WHERE message_id=$1", message_id
+                "DELETE FROM message_attachments WHERE message_attached_id=$1", message_id
             )
             # await config.db.execute(
             #     "DELETE FROM message_tags WHERE message_id=$1", message_id
@@ -500,7 +502,7 @@ async def edit_message(
             #         elif a[0] == ATTACHMENT_DOCUMENT:
             #             col = "document_id"
             #         await insert_with_unique_id(
-            #             "message_attachments", ("message_id", col), (message_id, a[1])
+            #             "message_attachments", ("message_attached_id", col), (message_id, a[1])
             #         )
             # if tags:
             #     for t in tags:
@@ -542,14 +544,6 @@ async def get_personal_chat(user1: int, user2: int) -> Optional[str]:
 
 
 @db_required
-async def update_last_message_id(chat_id: int, message_id: int):
-    await config.db.execute(f'UPDATE chats SET last_message_id = $1 WHERE id = $2;',
-                            message_id,
-                            chat_id)
-    return True
-
-
-@db_required
 async def get_messages_with_tag(
         current_user: int, chat_id: int, tag: str
 ) -> List[Dict[str, Any]]:
@@ -570,7 +564,7 @@ async def extract_tokens(current_user: int, users: List[int]):
     token_list = []
     for user in users:
         if user != current_user:
-            #log.info(user)
+            # log.info(user)
             if token := await config.db.fetchrow(
                     "select devices_token_list as tokens from users_authentication where id = $1 limit 1;",
                     user

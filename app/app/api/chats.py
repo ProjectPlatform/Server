@@ -5,6 +5,7 @@ import shutil
 import uuid
 from typing import Dict, Any, Optional, List, Tuple
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Body, Depends, Query, UploadFile, File, WebSocket, status
 from fastapi.encoders import jsonable_encoder
 from firebase_admin import messaging, auth
@@ -14,13 +15,12 @@ from starlette.responses import JSONResponse, FileResponse
 
 from app.app.backend.user import get_user_info
 from app.app.backend import ObjectNotFound
-from app.app.backend.exceptions import PermissionDenied
+from app.app.backend.exceptions import PermissionDenied, NotInitialised
 from app.app.src.schemas.chat import ChatCreate
 from app.app.backend.chat import get_info, add_user, remove_user, make_user_admin, create, create_personal, \
     set_non_admin, set_user_expandable, set_non_removable_messages, set_non_modifiable_messages, \
     set_auto_remove_messages, set_digest_messages, get_message, get_message_range, send_message, edit_message, \
-    delete_message, get_chats_for_user, get_messages_with_tag, create_upload_file, extract_tokens, \
-    update_last_message_id, get_attachment
+    delete_message, get_chats_for_user, get_messages_with_tag, create_upload_file, get_attachment
 from app.app.src.security import decode_token, oauth2_scheme
 from app.app.src.websockets import connections
 
@@ -111,7 +111,6 @@ async def req_remove_user(chat_id: int, user_id: Optional[int] = None, user_nick
     """
     try:
         cur_user_id = token["id"]
-
         user_to_remove = await get_user_info(user_id=user_id, user_nick=user_nick, user_email=user_email)
 
         result = await remove_user(current_user=cur_user_id, chat_id=chat_id, user_to_remove=user_to_remove["id"])
@@ -166,9 +165,9 @@ async def req_create_chat(info: ChatCreate, token: str = Depends(decode_token)) 
     * Status code **403**
     """
     try:
-        # chat = await create("str","str",0,False,False,False, False, False,False, False,0,False)
         user_id = token["id"]
         chat = await create(current_user_id=user_id, **info.dict())
+        await send_message(current_user=user_id, chat_id=chat["id"], body=f"Chat \'{chat['name']}\' was created", tags=[])
         return chat
     except PermissionDenied:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -305,8 +304,11 @@ async def req_get_message_range(chat_id: int, limit: int = 50, token: str = Depe
 
 @router.get("/get_attachments/{file_id}")
 async def get_attachments(file_id: int):
-    path = await get_attachment(file_id=file_id)
-    return FileResponse(path=path, media_type='application/octet-stream', filename=path[12:])
+    try:
+        path = await get_attachment(file_id=file_id)
+        return FileResponse(path=path, media_type='application/octet-stream', filename=path[12:])
+    except NotInitialised():
+        raise HTTPException(status_code=500, detail="Sorry, we have problem on server(")
 
 
 @router.post("/upload_attachments")
@@ -328,7 +330,7 @@ async def upload_attachments(is_showable: bool = True, description: Optional[str
             attachment_id = await create_upload_file(uploaded_file=file, current_user=user_id, description=description,
                                                      is_showable=is_showable)
             attachments_id.append(attachment_id)
-        return {'ids': attachments_id}
+        return {'uris': attachments_id}
     except PermissionDenied:
         raise HTTPException(status_code=403, detail="Permission denied")
 
@@ -336,7 +338,7 @@ async def upload_attachments(is_showable: bool = True, description: Optional[str
 @router.post('/send_message')
 async def req_send_message(chat_id: int, body: str = Body(...),
                            attachments: Optional[List[int]] = [],
-                           tags: Optional[List[str]] = None, token: str = Depends(decode_token), ) -> Any:
+                           tags: Optional[List[str]] = None, token: str = Depends(decode_token),) -> Any:
     """
     **Send a message to the specified chat.**
 
@@ -357,7 +359,6 @@ async def req_send_message(chat_id: int, body: str = Body(...),
     try:
         user_id = token["id"]
 
-        log.info("message_test:" + body)
         message = await send_message(current_user=user_id, chat_id=chat_id, body=body, attachments=attachments,
                                      tags=tags)
         # await update_last_message_id(chat_id=chat_id, message_id=message["id"])
