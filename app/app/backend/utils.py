@@ -38,3 +38,21 @@ async def insert_with_unique_id(
             else:
                 # TODO coolision id detected
                 raise e
+
+
+async def insert_without_unique_id(
+        table: str, columns: Tuple[str, ...], values: Tuple[Any, ...]
+) -> bool:
+    while 1:
+        try:
+            await config.db.execute(
+                f'INSERT INTO {table} ({", ".join(columns)}) VALUES ({", ".join([f"${i}" for i in range(1, len(values) + 1)])});',
+                *values,
+                )
+            return True
+        except UniqueViolationError as e:
+            if e.constraint_name == f"{table}_id_pkey":
+                continue
+            else:
+                # TODO coolision id detected
+                raise e
