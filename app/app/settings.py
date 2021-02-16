@@ -1,23 +1,18 @@
 import os
-from configparser import ConfigParser
-
 from pydantic import BaseSettings
-
-config = ConfigParser()
-config.read(os.path.join(os.path.dirname(__file__), 'config.ini'))
 
 
 class Settings(BaseSettings):
-    db_host: str = config['db']['PP_DB_HOST']
+    db_host: str = os.environ.get('DB_HOST')
     db_port: int = 5432
-    db_name: str = config['db']['PP_DB_NAME']
-    db_user: str = config['db']['PP_DB_USER']
-    db_pass: str = config['db']['PP_DB_PASS']
+    db_name: str = os.environ.get('DB_NAME')
+    db_user: str = os.environ.get('DB_USER')
+    db_pass: str = os.environ.get('DB_HOST')
 
-    class сonfig:
-        env_prefix = "pp_"
+    class Config:
+        env_prefix = "PP_"
 
 
 class TestSettings(Settings):
     class Config:
-        env_prefix = "pp_test_"
+        env_prefix = "PP_TEST_"
