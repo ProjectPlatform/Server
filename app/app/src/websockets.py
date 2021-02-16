@@ -6,8 +6,7 @@ import asyncio
 from fastapi import WebSocket
 from starlette.endpoints import WebSocketEndpoint
 
-from app.app.backend import get_user_info
-from app.app.src import security
+from app.app.src.security import decode_token
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +39,7 @@ class ConnectionManager(WebSocketEndpoint):
         # else:
         #     user_id = random.randint(1, 100)
 
-        user_id = await security.decode_token(websocket.headers["Authorization"])
+        user_id = await decode_token(websocket.headers["Authorization"])
         user_id = user_id["id"]
         await websocket.accept()
 
@@ -48,7 +47,7 @@ class ConnectionManager(WebSocketEndpoint):
         log.info(connections.active_connections)
 
     async def on_disconnect(self, _websocket: WebSocket, _close_code: int):
-        user_id = await security.decode_token(_websocket.headers["Authorization"])
+        user_id = await decode_token(_websocket.headers["Authorization"])
         user_id = user_id["id"]
 
         connections.remove_user(user_id)
