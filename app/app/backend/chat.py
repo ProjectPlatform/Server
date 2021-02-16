@@ -324,12 +324,14 @@ async def get_message_range(
         # lower_message = datetime.strptime(lower_date, "%Y-%m-%d %H:%M:%S.%f %z")
         # upper_message = datetime.strptime(upper_date, "%Y-%m-%d %H:%M:%S.%f %z")
 
-        message_list = await config.db.fetch(
-            "select * from messages where chat_attached_id = $1 and sent_time > ('2010-9-29 23:24:51.154352+03')::timestamptz Order by sent_time desc LIMIT $2;",
-            # "select * from messages where chat_attached_id = $1 and sent_time between $2 and $3 LIMIT $4;",
-            chat_id,
-            limit,
-        )
+        if message_list := await config.db.fetch(
+                "select * from messages where chat_attached_id = $1 and sent_time > ('2010-9-29 23:24:51.154352+03')::timestamptz Order by sent_time desc LIMIT $2;",
+                # "select * from messages where chat_attached_id = $1 and sent_time between $2 and $3 LIMIT $4;",
+                chat_id,
+                limit,
+        ):
+            return message_list
+        raise ObjectNotFound()
         # message_list["sent_time"] = datetime.strftime("%Y-%m-%d %H:%M:%S.%f %z")
         # elif not lower_message:
         #     message_list = await config.db.fetch(
@@ -348,7 +350,6 @@ async def get_message_range(
         # for idx, item in enumerate(message_list):
         #     message_list[idx] = dict(item)
         #     await __message_add_extra_fields__(message_list[idx])
-        return message_list
     raise PermissionDenied()
 
 
@@ -453,29 +454,41 @@ async def send_message(
 
 
 @db_required
-async def get_attachment(file_id: int):
-    file_path = await config.db.fetchrow(f'select path_original from sources where id = $1 limit 1;',
-                                         file_id)
-    return file_path["path_original"]
+async def get_attachment(file_uri: str, chat_id: int, current_user: int):
+    if file_path := await config.db.fetchrow(f'select path_original from sources where inner_uri = $1 limit 1;',
+                                             file_uri):
+        if bool(await config.db.fetchrow(
+                f'select exists(select chat_id from chat_attachments '
+                f'where chat_id = $1 and attachment = $2 limit 1);', chat_id, file_uri)) and await \
+                has_user(user_id=current_user, chat_id=chat_id):
+            return file_path["path_original"]
+        raise PermissionDenied()
+    raise ObjectNotFound()
 
 
 @db_required
-async def create_upload_file(uploaded_file: UploadFile, current_user: int, description: str, is_showable: bool) -> str:
-    filename, file_extension = os.path.splitext(uploaded_file.filename)
-    file_id = str(uuid.uuid4()) + file_extension
-    file_location = os.path.join(os.path.dirname(__file__), f'attachments/{file_id}')
-    with open(file_location, "wb+") as file_object:
-        shutil.copyfileobj(uploaded_file.file, file_object)
-    await insert_without_unique_id("sources",
-                                   ("inner_uri", "is_public", "is_showable", "path_original",
-                                    "path_thumbnail", "owner", "description", "meta"),
-                                   (file_id, True, is_showable, file_location, file_location,
-                                    current_user, description, "meta"))
-    return file_id
+async def create_upload_file(uploaded_files: List[UploadFile], current_user: int, description: str,
+                             is_showable: bool, is_public: bool = True) -> List[str]:
+    file_ids = []
+    for uploaded_file in uploaded_files:
+        filename, file_extension = os.path.splitext(uploaded_file.filename)
+        file_id = str(uuid.uuid4()) + file_extension
+        file_location = os.path.join(os.path.dirname(__file__), f'attachments/{file_id}')
+        with open(file_location, "wb+") as file_object:
+            shutil.copyfileobj(uploaded_file.file, file_object)
+        await insert_without_unique_id("sources",
+                                       ("inner_uri", "is_public", "is_showable", "path_original",
+                                        "path_thumbnail", "owner", "description", "meta"),
+                                       (file_id, is_public, is_showable, file_location, file_location,
+                                        current_user, description, "meta"))
+        file_ids.append(file_id)
+    return file_ids
 
 
-# ATTACHMENT_IMAGE = 0
-# ATTACHMENT_DOCUMENT = 1
+@db_required
+async def add_to_white_list(files_ids: List[str], chat_id: int):
+    for uri in files_ids:
+        await insert_without_unique_id("chat_attachments", ("chat_id", "attachment"), (chat_id, uri))
 
 
 @db_required
@@ -485,7 +498,7 @@ async def edit_message(
         body: str,
         attachments: Optional[List[Tuple[int, str]]] = None,
         tags: Optional[List[str]] = None,
-) -> bool:
+):
     m = await __get_message__(message_id)
     c = await __get_info__(m["chat_attached_id"])
     # or c["non_modifiable_messages"]
@@ -517,7 +530,8 @@ async def edit_message(
             #         await insert_with_unique_id(
             #             "message_tags", ("message_id", "tag"), (message_id, t)
             #         )
-    return True
+    m = await __get_message__(message_id)
+    return m
 
 
 @db_required
@@ -533,12 +547,13 @@ async def delete_message(current_user: int, message_id: int) -> bool:
 
 @db_required
 async def get_chats_for_user(user_id: str) -> List[str]:
-    chat_list = await config.db.fetch(
-        "SELECT chat_id FROM chat_participants WHERE participant_id=$1", user_id
-    )
-    for idx, item in enumerate(chat_list):
-        chat_list[idx] = item["chat_id"]
-    return chat_list
+    if chat_list := await config.db.fetch(
+            "SELECT chat_id FROM chat_participants WHERE participant_id=$1", user_id
+    ):
+        for idx, item in enumerate(chat_list):
+            chat_list[idx] = item["chat_id"]
+        return chat_list
+    raise ObjectNotFound()
 
 
 @db_required
@@ -562,7 +577,6 @@ async def get_messages_with_tag(
             chat_id,
             tag,
     ):
-        logging.info(type(message_list))
         return message_list
     raise ObjectNotFound()
 

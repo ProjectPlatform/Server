@@ -117,9 +117,12 @@ async def req_remove_user(chat_id: int, user_id: Optional[int] = None, user_nick
         if not result:
             raise ObjectNotFound()
 
-        message = await send_message(current_user=1, chat_id=chat_id,
-                                     body=user_to_remove["nick"] + " has left the chat.", tags=[])
-        return message
+@router.get("/download_attachments/{file_uri}")
+async def get_attachments(file_uri: str, chat_id: int, token: str = Depends(decode_token)):
+    try:
+        user_id = token["id"]
+        path = await get_attachment(file_uri=file_uri, chat_id=chat_id, current_user=user_id)
+        return FileResponse(path=path, media_type='application/octet-stream', filename=os.path.basename(path))
     except PermissionDenied:
         raise HTTPException(status_code=403, detail="Permission denied")
     except ObjectNotFound:
