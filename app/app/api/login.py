@@ -10,11 +10,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 from firebase_admin import auth, messaging
 from starlette.responses import JSONResponse
 
-from app.app.backend.exceptions import NotInitialised
+from app.app.backend.exceptions import NotInitialised, AuthenticationError, NickTaken, EmailTaken, ObjectNotFound
 from app.app.src import schemas
-from app.app.backend import user, NickTaken, EmailTaken, AuthenticationError, ObjectNotFound, get_user_info
-from app.app.backend.user import insert_fcm_token, delete_fcm_token, check_duplicate_fcm_token, temporary_registration,\
-    verification_attempt
+# from app.app.backend import user, NickTaken, EmailTaken, AuthenticationError, ObjectNotFound, get_user_info
+from app.app.backend.user import insert_fcm_token, delete_fcm_token, check_duplicate_fcm_token, temporary_registration, \
+    verification_attempt, authenticate, register, get_user_info
 from app.app.src.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, decode_token
 from app.app.utils import send_verification_email
 
@@ -33,10 +33,9 @@ async def login_for_access_token(fcm_token: Optional[str] = None, form_data: OAu
 
     **Exceptions**
     * Status code **401**
-    * Status code **501**
     """
     try:
-        user_id = await user.authenticate(nick=form_data.username, password=form_data.password)
+        user_id = await authenticate(nick=form_data.username, password=form_data.password)
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -54,10 +53,10 @@ async def login_for_access_token(fcm_token: Optional[str] = None, form_data: OAu
             await insert_fcm_token(current_user=user_id, fcm_token=fcm_token)
 
         return {"access_token": access_token, "token_type": "bearer", "id": user_id}
-    except NotInitialised:
-        HTTPException(status_code=501, detail="Sorry, we have some problems on server")
     except AuthenticationError:
         raise HTTPException(status_code=401, detail="Invalid username or password")
+    # except NotInitialised:
+    #     HTTPException(status_code=501, detail="Sorry, we have some problems on server")
 
 
 @router.post("/registration")
@@ -71,10 +70,9 @@ async def create_user(
 
     **Exceptions:**
     * Status code **422**
-    * Status code **501**
     """
     try:
-        await user.register(nick=user_in.nick, password=user_in.password, email=user_in.email, name=user_in.name)
+        await register(nick=user_in.nick, password=user_in.password, email=user_in.email, name=user_in.name)
         user_info = await get_user_info(user_nick=user_in.nick)
 
         verification_code = random.randint(100000, 999999)
@@ -86,7 +84,7 @@ async def create_user(
                                               <mj-column>
                                                 <mj-divider border-color="#555"></mj-divider>
                                                 <mj-text font-size="20px" color="#555" font-family="helvetica">Your verification code: {{ code }}</mj-text>
-                                        
+                                                
                                                 <mj-divider border-color="#555" border-width="2px" />
                                               </mj-column>
                                             </mj-section>
@@ -96,12 +94,12 @@ async def create_user(
 
         await temporary_registration(user_id=user_info["id"], verification_code=verification_code)
         return {"id": user_info["id"]}
-    except NotInitialised:
-        HTTPException(status_code=501, detail="Sorry, we have some problems on server")
     except NickTaken:
         raise HTTPException(status_code=422, detail="Nick is taken")
     except EmailTaken:
         raise HTTPException(status_code=422, detail="Email is taken")
+    # except NotInitialised:
+    #     HTTPException(status_code=501, detail="Sorry, we have some problems on server")
 
 
 @router.post("/verification")
@@ -115,9 +113,9 @@ async def verification(user_id: int, verification_code: int):
     """
     result = await verification_attempt(user_id=user_id, verification_code=verification_code)
     if result:
-        return JSONResponse(content={"message": "You have successfully verified your account"})
+        return HTTPException(status_code=200, detail="You have successfully verified your account")
     else:
-        return JSONResponse(status_code=422, content={"message": "Wrong verification code. Try again"})
+        return HTTPException(status_code=422, detail="Wrong verification code. Try again")
 
 
 @router.post("/logout")
@@ -125,30 +123,14 @@ async def logout(fcm_token: str, token: str = Depends(decode_token)):
     """
     **Revokes the user's fcm token.**
 
-    Returns JSON string ```{'result': true}```
+    Returns JSON string ```{'result': True}```
 
     **Exceptions:**
     * Status code **404**
     """
     try:
         user_id = token["id"]
-        await delete_fcm_token(current_user=user_id, fcm_token=fcm_token)
-        return {"result": True}
+        result = await delete_fcm_token(current_user=user_id, fcm_token=fcm_token)
+        return {"result": result}
     except ObjectNotFound:
-        raise HTTPException(status_code=404, detail="Page not found")
-
-
-@router.get("/echo")
-async def read_root(echo: str):
-    log.info(echo)
-    message = messaging.Message(
-        notification=messaging.Notification(
-            title=echo,
-            body=echo,
-        ),
-        token="fKxkxbWdTTCuwfodx37qZe:APA91bHTbYrcHvvlivB84UAukLKfKquweyXqJzdgW10JHRbgBMcVCr8N_DkebFTE0Y_OXjsMsBT5WFySSO3NLuo0b3EQSzPTN11QXIgnnI-n4T-NgJ2Ckhk-0TeDdSYRT4KIAoDOZjCY"
-    )
-    response = messaging.send(message)
-
-    print('Successfully sent message:', response)
-    return {"echo": echo}
+        raise HTTPException(status_code=404, detail="Resource wasn't found")
