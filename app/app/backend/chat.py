@@ -419,6 +419,15 @@ async def __send_message_firebase__(
 
 
 @db_required
+async def send_system_message(
+        chat_id: int,
+        body: str,
+) -> Dict[str, Any]:
+    message = await send_message(current_user=1, chat_id=chat_id, body=body, attachments=[], tags=[])
+    return message
+
+
+@db_required
 async def send_message(
         current_user: int,
         chat_id: int,
