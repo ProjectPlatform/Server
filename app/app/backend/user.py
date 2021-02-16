@@ -46,8 +46,6 @@ async def get_user_info(current_user: Optional[int] = None, user_id: Optional[in
     if user_id is not None:
         if u := await config.db.fetchrow("SELECT * FROM users_authentication WHERE id=$1", user_id):
             return {"id": u["id"], "nick": u["nick"], "name": u["name"], "email": u["email"]}
-            # TODO Ilya will add new table user info which will be contain column avatar_id
-            # return {"nick": u["nick"], "name": u["name"], "avatar_id": u["avatar_id"]}
         else:
             raise ObjectNotFound()
     elif user_nick is not None:
@@ -82,39 +80,35 @@ async def verification_attempt(user_id: int, verification_code: int):
         await config.db.execute(f'update users_authentication set was_confirmed = true where id = $1;',
                                 user_id)
     else:
-        await config.db.execute(f'update registration_verification_codes set attemptsMade = attemptsMade + 1 where id = $1;',
-                                user_id)
+        await config.db.execute(
+            f'update registration_verification_codes set attemptsMade = attemptsMade + 1 where id = $1;',
+            user_id)
     return result
 
 
 @db_required
 async def delete_user_system(current_user: int):
-    try:
-        await config.db.execute(f'DELETE FROM users_authentication WHERE id = $1;', current_user)
-        return True
-    except Exception as e:
-        raise ObjectNotFound()
+    if result := await config.db.execute(f'DELETE FROM users_authentication WHERE id = $1;', current_user):
+        return result
+    raise ObjectNotFound()
 
 
 @db_required
 async def change_pass(current_user: int, password: str):
-    try:
-        password_hash = pbkdf2_sha256.hash(password)
-        await config.db.execute(f'UPDATE users_authentication SET passwd_hash = $1 WHERE id = $2;', password_hash,
-                                current_user)
-        return True
-    except Exception as e:
-        raise ObjectNotFound()
+    password_hash = pbkdf2_sha256.hash(password)
+    if result := await config.db.execute(f'UPDATE users_authentication SET passwd_hash = $1 WHERE id = $2;',
+                                         password_hash,
+                                         current_user):
+        return result
+    raise ObjectNotFound()
 
 
 @db_required
 async def change_email(current_user: int, email: EmailStr):
-    try:
-        await config.db.execute(f'UPDATE users_authentication SET email = $1 WHERE id = $2;', email,
-                                current_user)
-        return True
-    except Exception as e:
-        raise ObjectNotFound()
+    if result := await config.db.execute(f'UPDATE users_authentication SET email = $1 WHERE id = $2;', email,
+                                         current_user):
+        return result
+    raise ObjectNotFound()
 
 
 @db_required
@@ -129,14 +123,14 @@ async def insert_fcm_token(current_user: int, fcm_token: str):
 
 @db_required
 async def delete_fcm_token(current_user: int, fcm_token: str):
-    try:
-        await config.db.execute(
-            "update users_authentication set devices_token_list = array_remove(devices_token_list, $2::varchar) where id = $1 and $2 = any(devices_token_list);",
+    if result := await config.db.execute(
+            "update users_authentication set devices_token_list = array_remove(devices_token_list, $2::varchar)"
+            " where id = $1 and $2 = any(devices_token_list);",
             current_user,
             fcm_token,
-        )
-    except Exception as e:
-        raise ObjectNotFound()
+    ):
+        return result
+    raise ObjectNotFound()
 
 
 @db_required
