@@ -23,6 +23,7 @@ SQLAlchemy
 typing-extensions
 click
 multidict
+aiofiles
 python-dotenv
 pytest
 emails
