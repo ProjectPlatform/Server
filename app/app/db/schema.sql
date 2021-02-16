@@ -7,6 +7,8 @@ drop table if exists chats;
 drop table if exists sources;
 drop table if exists registration_verification_codes;
 drop table if exists users_authentication;
+drop function if exists is_user_chat_participant;
+drop function if exists is_user_admin;
 ------------------------------------------------------------------------------------------------------------------------------------------------
 create table users_authentication(
 	id int8 default ('x' || right(md5(to_char(current_timestamp, 'dd-mm-yyyy hh:mi:ss:us')), 8))::bit(63)::int8,
@@ -93,15 +95,32 @@ create index chat_participants_chat_ind
 	on chat_participants(chat_id);
 create index chat_participants_user_ind
 	on chat_participants(participant_id);
+
+create function is_user_chat_participant(_user_id int8, _chat_id int8)
+returns boolean as $$
+declare passed boolean;
+begin
+        return exists( select '*' from chat_participants where chat_id = _chat_id and participant_id = _user_id);
+end;
+$$  language plpgsql;
+
+create function is_user_admin(_user_id int8, _chat_id int8)
+returns boolean as $$
+declare passed boolean;
+begin
+        return exists( select '*' from chat_participants where chat_id = _chat_id and participant_id = _user_id and is_admin);
+end;
+$$  language plpgsql;
 ------------------------------------------------------------------------------------------------------------------------------------------------
 create table messages(
     id int8,
 	chat_attached_id int8 references chats(id) on delete cascade,
 	author_id int8 references users_authentication(id) on delete cascade,
-	sent_time timestamp default current_timestamp::timestamp,
+	sent_time timestamptz default current_timestamp::timestamptz,
 	tag_list varchar[] default array[]::varchar[],
 	body text default '',
 	has_attached_file boolean default false not null,
+	was_modified boolean default false,
 
 	primary key (id),
 	constraint time_unique unique (sent_time),
