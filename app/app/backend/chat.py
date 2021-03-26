@@ -30,6 +30,7 @@ async def has_user(user_id: int, chat_id: int):
     )
 
 
+@db_required
 async def is_user_admin(user_id: int, chat_id: int):
     return bool(
         await config.db.fetchrow(
